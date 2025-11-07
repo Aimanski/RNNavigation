@@ -8,7 +8,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+
+    "eas:build:android:preview": "eas-cli build --platform android --profile preview",
+    "eas:build:ios:preview": "eas-cli build --platform ios --profile preview"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -52,5 +55,14 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+
+  "contributes": {
+    "jsonValidation": [
+      {
+        "fileMatch": "package.json",
+        "url": "https://json.schemastore.org/package"
+      }
+    ]
+  }
 }
