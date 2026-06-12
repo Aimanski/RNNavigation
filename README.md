@@ -1,6 +1,7 @@
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This is a Calorie/Weight Tracking that help people track their calorie intake and help people to balance their health.
 
 ## Get started
 
