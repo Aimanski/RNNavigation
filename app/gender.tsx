@@ -1,37 +1,40 @@
-// app/gender.tsx
+// Gender
 
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  BackHandler,
-  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  useWindowDimensions,
   View,
 } from "react-native";
+import { Text } from "../components/ui/AppText";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { FemaleCharacter, MaleCharacter } from "../components/brand/GenderCharacters";
+import StepProgress from "../components/ui/StepProgress";
 import { supabase } from "../lib/supabase";
-
-const maleImg = require("../assets/images/lalaki.png");
-const femaleImg = require("../assets/images/babae.png");
+import { getSessionUser } from "../lib/auth/session";
+import { resetTo } from "../lib/navigation";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+const CHARACTER_SIZE = 116;
 
 export default function GenderScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { width } = useWindowDimensions();
+  const { colors, isDark } = useTheme();
+  const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -48,14 +51,9 @@ export default function GenderScreen() {
   }));
 
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => true);
-    return () => backHandler.remove();
-  }, []);
-
-  useEffect(() => {
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getSessionUser();
         if (!user) {
           router.replace("/");
           return;
@@ -67,9 +65,7 @@ export default function GenderScreen() {
         let weight = parseFloat(params.weight as string);
         let bmi = parseFloat(params.bmi as string);
 
-        // FIX #2/#3: If params are missing, load from DB to pre-fill —
-        // but do NOT redirect forward if gender is already set.
-        // AuthProvider already determined this is the right screen.
+        // Prefill
         if (!age || !height || !weight) {
           const { data, error } = await supabase
             .from("weighApp")
@@ -97,7 +93,7 @@ export default function GenderScreen() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [params.age, params.bmi, params.height, params.weight, router]);
 
   const select = async (gender: "Male" | "Female", bmrOffset: number) => {
     if (!userId || !profile) return;
@@ -117,7 +113,7 @@ export default function GenderScreen() {
 
       if (error) throw error;
 
-      router.push({
+      resetTo(router, {
         pathname: "/activity",
         params: {
           age: age.toString(),
@@ -137,7 +133,7 @@ export default function GenderScreen() {
   if (loading || !profile) {
     return (
       <SafeAreaView style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={s.loadingText}>Preparing your journey...</Text>
       </SafeAreaView>
     );
@@ -146,95 +142,158 @@ export default function GenderScreen() {
   return (
     <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
       <View style={s.topHeader}>
-        <Text style={s.title}>Next step...</Text>
+        <View style={s.progressWrap}>
+          <StepProgress step={2} />
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={s.scrollContent}>
-        <Text style={s.subtitle}>Tell us your biological sex</Text>
+      <ScrollView
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={s.title}>Tell us your biological sex</Text>
         <Text style={s.description}>
           This helps us calculate your metabolism accurately
         </Text>
 
-        <View style={s.cardsColumn}>
-          {/* MALE */}
+        <View style={s.cardsRow}>
+          {/* Male */}
           <AnimatedPressable
             style={[s.genderCard, s.maleCard, maleStyle]}
             onPressIn={() => (maleScale.value = withSpring(0.96))}
             onPressOut={() => (maleScale.value = withSpring(1))}
             onPress={() => select("Male", 5)}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Male"
           >
-            <Image source={maleImg} style={s.image} resizeMode="contain" />
+            <View style={s.character}>
+              <MaleCharacter size={CHARACTER_SIZE} backdrop={isDark ? "#1F3A57" : "#CFE4FB"} />
+            </View>
             <Text style={s.genderLabel}>Male</Text>
           </AnimatedPressable>
 
-          {/* FEMALE */}
+          {/* Female */}
           <AnimatedPressable
             style={[s.genderCard, s.femaleCard, femaleStyle]}
             onPressIn={() => (femaleScale.value = withSpring(0.96))}
             onPressOut={() => (femaleScale.value = withSpring(1))}
             onPress={() => select("Female", -161)}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Female"
           >
-            <Image source={femaleImg} style={s.image} resizeMode="contain" />
+            <View style={s.character}>
+              <FemaleCharacter size={CHARACTER_SIZE} backdrop={isDark ? "#4A2A3F" : "#FAD1EA"} />
+            </View>
             <Text style={s.genderLabel}>Female</Text>
           </AnimatedPressable>
+        </View>
+
+        <View style={s.noteRow}>
+          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
+          <Text style={s.noteText}>Only used to estimate your daily calorie needs</Text>
         </View>
       </ScrollView>
 
       {loading && (
         <View style={s.loadingOverlay}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       )}
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f8fff9" },
-  loadingContainer: {
-    flex: 1, backgroundColor: "#f8fff9",
-    justifyContent: "center", alignItems: "center",
-  },
-  topHeader: {
-    paddingTop: Platform.OS === "android" ? 45 : 24,
-    paddingBottom: 40, paddingHorizontal: 24, alignItems: "center",
-  },
-  title: {
-    fontSize: 36, fontWeight: "900", color: "#064e3b",
-    textAlign: "center", letterSpacing: 0.8,
-  },
-  subtitle: {
-    fontSize: 21, fontWeight: "800", color: "#059669",
-    textAlign: "center", marginBottom: 12,
-  },
-  description: {
-    fontSize: 17, color: "#065f46", textAlign: "center",
-    lineHeight: 26, marginBottom: 50, paddingHorizontal: 32, fontWeight: "600",
-  },
-  scrollContent: {
-    paddingHorizontal: 24, paddingBottom: 120,
-    alignItems: "center", flexGrow: 1,
-  },
-  cardsColumn: { width: "100%", maxWidth: 400, gap: 36, alignItems: "center" },
-  genderCard: {
-    width: "100%", height: 300, backgroundColor: "#ffffff",
-    borderRadius: 42, padding: 32, alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#10b981", shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.28, shadowRadius: 40, elevation: 30, borderWidth: 4,
-  },
-  maleCard: { borderColor: "#86efac" },
-  femaleCard: { borderColor: "#fdb8e9" },
-  image: { width: 180, height: 180, marginBottom: 24 },
-  genderLabel: {
-    fontSize: 34, fontWeight: "900", color: "#065f46", letterSpacing: 1.8,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(248, 255, 249, 0.97)",
-    justifyContent: "center", alignItems: "center", zIndex: 10,
-  },
-  loadingText: { marginTop: 24, fontSize: 19, color: "#059669", fontWeight: "700" },
-});
+const makeStyles = (c: Colors, isDark: boolean) =>
+  StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: c.background },
+    pressed: { opacity: 0.7 },
+    loadingContainer: {
+      flex: 1,
+      backgroundColor: c.background,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    // Header
+    topHeader: {
+      paddingTop: Platform.OS === "android" ? 60 : 64,
+      paddingBottom: 12,
+      paddingHorizontal: 24,
+    },
+    backBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.surface,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    progressWrap: { width: "100%" },
+    scrollContent: {
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 40,
+      flexGrow: 1,
+      justifyContent: "center",
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: "800",
+      color: c.textPrimary,
+      textAlign: "center",
+      marginBottom: 8,
+    },
+    description: {
+      fontSize: 15,
+      color: c.textSecondary,
+      textAlign: "center",
+      lineHeight: 22,
+      marginBottom: 28,
+      paddingHorizontal: 16,
+      fontWeight: "500",
+    },
+    cardsRow: { flexDirection: "row", gap: 14, width: "100%" },
+    genderCard: {
+      flex: 1,
+      backgroundColor: c.surface,
+      borderRadius: 28,
+      paddingVertical: 22,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+    },
+    maleCard: {
+      borderColor: c.borderStrong,
+      backgroundColor: c.surfaceAlt,
+    },
+    femaleCard: {
+      borderColor: "#fdb8e9",
+      backgroundColor: isDark ? "#2A1A25" : "#FFF3FB",
+    },
+    character: { marginBottom: 14 },
+    genderLabel: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.textPrimary,
+      letterSpacing: 0.5,
+    },
+    noteRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      marginTop: 22,
+    },
+    noteText: { fontSize: 12.5, fontWeight: "600", color: c.textMuted },
+    loadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: c.background + "F2",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingText: { marginTop: 24, fontSize: 18, color: c.textSecondary, fontWeight: "700" },
+  });

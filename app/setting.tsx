@@ -1,24 +1,27 @@
-// app/setting.tsx — FIXED: Prevent back navigation after logout
+// Settings
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
+  Switch,
   View,
 } from "react-native";
+import { Text } from "../components/ui/AppText";
 import { supabase } from "../lib/supabase";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
 type AppRoute =
   | "/"
   | "/main"
   | "/account"
   | "/updateInfo"
+  | "/preferences"
   | "/reminders"
   | "/water"
   | "/sleep"
@@ -29,6 +32,8 @@ type AppRoute =
 
 export default function SettingScreen() {
   const router = useRouter();
+  const { colors, isDark, toggleTheme } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const logout = async () => {
@@ -72,8 +77,13 @@ export default function SettingScreen() {
       "Blood Pressure": "/bloodPressure",
       "Help & support": "/help",
       "Give feedback":  "/feedback",
-      "About us":       "/about",
+      "Meet the Team":  "/about",
     };
+
+    if (title === "Food Preferences") {
+      router.push({ pathname: "/preferences", params: { mode: "edit" } });
+      return;
+    }
 
     const route = routes[title];
     if (route) {
@@ -83,41 +93,62 @@ export default function SettingScreen() {
     }
   };
 
-  const settings = [
-    "Account",
-    "Update Info",
-    "Set reminders",
-    "Water",
-    "Blood Pressure",
-    "Help & support",
-    "Give feedback",
-    "About us",
+  const settings: { title: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { title: "Account", icon: "person-circle-outline" },
+    { title: "Update Info", icon: "information-circle-outline" },
+    { title: "Food Preferences", icon: "nutrition-outline" },
+    { title: "Set reminders", icon: "notifications-outline" },
+    { title: "Water", icon: "water-outline" },
+    { title: "Blood Pressure", icon: "pulse-outline" },
+    { title: "Help & support", icon: "help-circle-outline" },
+    { title: "Give feedback", icon: "chatbubble-ellipses-outline" },
+    { title: "Meet the Team", icon: "people-outline" },
   ];
 
   return (
     <View style={s.container}>
-      {/* Fixed Header */}
+      {/* Header */}
       <View style={s.fixedHeader}>
-        <Pressable onPress={() => router.push("/main" as AppRoute)} style={s.backButton}>
-          <Ionicons name="arrow-back" size={28} color="#10b981" />
-        </Pressable>
         <Text style={s.header}>Settings</Text>
       </View>
 
-      {/* Scrollable Content */}
+      {/* Content */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scrollContent}
       >
-        <View style={s.grid}>
-          {settings.map((title, i) => (
-            <Pressable key={i} style={s.item} onPress={() => open(title)}>
-              <View style={s.box}>
-                <Text style={s.txt}>{title}</Text>
-                <View style={s.arrow}>
-                  <Ionicons name="chevron-forward" size={24} color="#10b981" />
-                </View>
-              </View>
+        <View style={s.darkModeRow}>
+          <View style={s.darkModeIconWrap}>
+            <Ionicons
+              name="moon"
+              size={22}
+              color={colors.onAccent}
+            />
+          </View>
+          <View style={s.darkModeTextWrap}>
+            <Text style={s.darkModeTitle}>Dark Mode</Text>
+            <Text style={s.darkModeSub}>
+              {isDark ? "On — using the dark theme" : "Off — using the light theme"}
+            </Text>
+          </View>
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor="#ffffff"
+          />
+        </View>
+
+        <View style={s.list}>
+          {settings.map(({ title, icon }, i) => (
+            <Pressable
+              key={title}
+              style={[s.row, i === settings.length - 1 && s.rowLast]}
+              onPress={() => open(title)}
+            >
+              <Ionicons name={icon} size={26} color={colors.textPrimary} />
+              <Text style={s.txt}>{title}</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textPrimary} />
             </Pressable>
           ))}
         </View>
@@ -128,117 +159,97 @@ export default function SettingScreen() {
           disabled={loggingOut}
         >
           {loggingOut ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.textPrimary} />
           ) : (
             <Text style={s.logoutTxt}>Logout</Text>
           )}
         </Pressable>
 
-        <View style={{ height: 80 }} />
+        <View style={{ height: 170 }} />
       </ScrollView>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fff9",
-  },
-  fixedHeader: {
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    backgroundColor: "#f8fff9",
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(16, 185, 129, 0.08)",
-  },
-  backButton: {
-    position: "absolute",
-    top: 60,
-    left: 20,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  header: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#065f46",
-    textAlign: "center",
-    marginTop: 16,
-    letterSpacing: 0.5,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  item: {
-    width: "48%",
-    marginBottom: 20,
-  },
-  box: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 24,
-    height: 140,
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 25,
-    elevation: 15,
-    borderWidth: 1,
-    borderColor: "#ecfdf5",
-  },
-  txt: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#065f46",
-    textAlign: "center",
-  },
-  arrow: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#ecfdf5",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#86efac",
-  },
-  logout: {
-    backgroundColor: "#10b981",
-    paddingVertical: 18,
-    borderRadius: 20,
-    alignItems: "center",
-    marginTop: 30,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 12,
-  },
-  logoutTxt: {
-    color: "#ffffff",
-    fontSize: 19,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-});
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    fixedHeader: {
+      paddingTop: 56,
+      paddingHorizontal: 24,
+      backgroundColor: c.background,
+      paddingBottom: 12,
+    },
+    header: {
+      fontSize: 32,
+      fontWeight: "800",
+      color: c.textPrimary,
+      textAlign: "left",
+      letterSpacing: -0.3,
+    },
+    scrollContent: {
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      paddingBottom: 40,
+    },
+    darkModeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      backgroundColor: c.surface,
+      borderRadius: 16,
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      marginBottom: 24,
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    darkModeIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.accent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    darkModeTextWrap: { flex: 1 },
+    darkModeTitle: { fontSize: 16, fontWeight: "800", color: c.textPrimary },
+    darkModeSub: { fontSize: 12.5, fontWeight: "500", color: c.textSecondary, marginTop: 2 },
+    list: {
+      marginBottom: 8,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      paddingVertical: 18,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    rowLast: {
+      borderBottomWidth: 0,
+    },
+    txt: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: "500",
+      color: c.textPrimary,
+    },
+    logout: {
+      backgroundColor: "transparent",
+      paddingVertical: 16,
+      borderRadius: 12,
+      alignItems: "center",
+      marginTop: 24,
+      borderWidth: 1.5,
+      borderColor: c.textPrimary,
+    },
+    logoutTxt: {
+      color: c.textPrimary,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+  });

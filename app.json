@@ -4,7 +4,7 @@
     "slug": "RNNavigation",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/WeighApp.jpg",
+    "icon": "./assets/images/icon.png",
     "scheme": "weighapp",
     "userInterfaceStyle": "automatic",
     "description": "WeighApp is a powerful meal planning and weight tracking application. Log your daily meals, track calories and macros, monitor your weight progress with beautiful charts, and get personalized meal suggestions. Latest feature: Advanced progress analytics and customizable goals to help you stay motivated!",
@@ -12,7 +12,8 @@
     "privacy": "public",
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "newArchEnabled": true,
     "updates": {
@@ -24,18 +25,22 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "icon": "./assets/images/WeighApp.jpg",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.aimanski.weighapp",
       "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/WeighApp.jpg",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
-        "backgroundColor": "#96e235"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.aimanski.weighapp",
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM"
+      ],
       "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -67,21 +72,33 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/WeighApp.jpg",
-          "imageWidth": 200,
+          "image": "./assets/images/splash-light.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#059669",
+          "backgroundColor": "#FFFFFF",
           "dark": {
+            "image": "./assets/images/splash-dark.png",
             "backgroundColor": "#000000"
           }
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "WeighApp uses the camera to scan food, barcodes, and QR codes so it can log nutrition for you."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "WeighApp uses your photo library so you can set a profile picture."
+        }
+      ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "router": {},

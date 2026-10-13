@@ -1,12 +1,8 @@
-// app/sleep.tsx — Semi-Automatic Sleep Logger
-// Tap "I'm Going to Sleep" → records sleep_time in AsyncStorage.
-// Tap "I Just Woke Up"    → records wake_time, calculates duration, saves to Supabase.
-// A live status card ticks up elapsed time while the user is sleeping.
+// Sleep
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,9 +11,9 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
-  View
+  View,
 } from "react-native";
+import { Text } from "../components/ui/AppText";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -25,15 +21,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
+import { getSessionUser } from "../lib/auth/session";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
-// ─────────────────────────────────────────────
-// AsyncStorage key for persisting active sleep
-// ─────────────────────────────────────────────
+// Storage
 const SLEEP_START_KEY = "active_sleep_start_iso";
 
-// ─────────────────────────────────────────────
 // Types
-// ─────────────────────────────────────────────
 type SleepEntry = {
   id: string;
   sleep_time: string;
@@ -48,12 +42,10 @@ type SleepRemark = {
   suggestion: string;
 };
 
-// ─────────────────────────────────────────────
-// Philippines time helpers
-// ─────────────────────────────────────────────
+// Timezone
 const PH_TIMEZONE = "Asia/Manila";
 
-/** Format an ISO string as a readable PH-timezone time, e.g. "10:45 PM" */
+/* Formatting */
 const formatPHTime = (iso: string): string =>
   new Date(iso).toLocaleString("en-US", {
     timeZone: PH_TIMEZONE,
@@ -62,7 +54,7 @@ const formatPHTime = (iso: string): string =>
     hour12: true,
   });
 
-/** Format an ISO string as a readable PH-timezone date, e.g. "Sat, May 3" */
+/* Formatting */
 const formatPHDate = (iso: string): string =>
   new Date(iso).toLocaleString("en-US", {
     timeZone: PH_TIMEZONE,
@@ -71,9 +63,7 @@ const formatPHDate = (iso: string): string =>
     day: "numeric",
   });
 
-// ─────────────────────────────────────────────
-// Sleep quality remark
-// ─────────────────────────────────────────────
+// Remark
 function getSleepRemark(durationHours: number): SleepRemark {
   if (durationHours < 4)
     return {
@@ -99,7 +89,7 @@ function getSleepRemark(durationHours: number): SleepRemark {
   if (durationHours <= 9)
     return {
       label: "Great sleep!",
-      color: "#10b981",
+      color: "#0B6FDB",
       suggestion:
         "You're getting the recommended 7–9 hours. Keep it up! Maintain a consistent sleep schedule to maximise your rest.",
     };
@@ -111,7 +101,7 @@ function getSleepRemark(durationHours: number): SleepRemark {
   };
 }
 
-/** Convert milliseconds to "Xh Ym" string */
+/* Duration */
 function msToDuration(ms: number): string {
   const totalMins = Math.floor(ms / 60_000);
   const h = Math.floor(totalMins / 60);
@@ -119,9 +109,7 @@ function msToDuration(ms: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// ─────────────────────────────────────────────
-// Animated Pressable helper
-// ─────────────────────────────────────────────
+// Animation
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function SpringButton({
@@ -147,33 +135,32 @@ function SpringButton({
   );
 }
 
-// ─────────────────────────────────────────────
-// Main screen
-// ─────────────────────────────────────────────
+// Screen
 export default function SleepScreen() {
-  const router = useRouter();
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
-  // ISO string of when the user tapped "I'm Going to Sleep", or null
+  // State
   const [activeSleepISO, setActiveSleepISO] = useState<string | null>(null);
 
-  // Live elapsed text while sleeping ("3h 12m")
+  // Elapsed
   const [elapsed, setElapsed] = useState("");
 
   const [history, setHistory] = useState<SleepEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Success modal
+  // Modal
   const [remarkVisible, setRemarkVisible] = useState(false);
   const [currentRemark, setCurrentRemark] = useState<SleepRemark | null>(null);
   const [currentDuration, setCurrentDuration] = useState("");
 
-  // Cancel-confirm modal (for when user wants to cancel an active sleep)
+  // Cancel
   const [cancelVisible, setCancelVisible] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── On mount: restore any in-progress sleep & fetch history ──
+  // Restore
   useEffect(() => {
     (async () => {
       const stored = await AsyncStorage.getItem(SLEEP_START_KEY);
@@ -186,7 +173,7 @@ export default function SleepScreen() {
     return () => stopElapsedTimer();
   }, []);
 
-  // ── Live timer ──
+  // Timer
   const startElapsedTimer = (startISO: string) => {
     stopElapsedTimer();
     const tick = () => {
@@ -194,7 +181,7 @@ export default function SleepScreen() {
       setElapsed(msToDuration(ms));
     };
     tick();
-    timerRef.current = setInterval(tick, 30_000); // update every 30 s
+    timerRef.current = setInterval(tick, 30_000); // Interval
   };
 
   const stopElapsedTimer = () => {
@@ -204,12 +191,10 @@ export default function SleepScreen() {
     }
   };
 
-  // ── Fetch history from Supabase ──
+  // History
   const fetchSleepHistory = async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       const { data, error } = await supabase
@@ -227,10 +212,10 @@ export default function SleepScreen() {
     }
   };
 
-  // ── Tap: I'm Going to Sleep ──
+  // Start
   const handleGoToSleep = async () => {
     if (activeSleepISO) {
-      // Already sleeping — shouldn't reach here, but guard anyway
+      // Guard
       Alert.alert("Already sleeping!", "You already started a sleep session.");
       return;
     }
@@ -240,7 +225,7 @@ export default function SleepScreen() {
     startElapsedTimer(now);
   };
 
-  // ── Tap: I Just Woke Up ──
+  // Wake
   const handleWakeUp = async () => {
     if (!activeSleepISO) return;
 
@@ -276,9 +261,7 @@ export default function SleepScreen() {
   ) => {
     setSaving(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       const { error } = await supabase.from("sleep_logs").insert({
@@ -290,13 +273,13 @@ export default function SleepScreen() {
 
       if (error) throw error;
 
-      // Clear active session
+      // Cleanup
       await AsyncStorage.removeItem(SLEEP_START_KEY);
       stopElapsedTimer();
       setActiveSleepISO(null);
       setElapsed("");
 
-      // Show success modal
+      // Success
       const durationStr = msToDuration(durationHours * 3_600_000);
       const remark = getSleepRemark(durationHours);
       setCurrentDuration(durationStr);
@@ -311,7 +294,7 @@ export default function SleepScreen() {
     }
   };
 
-  // ── Cancel active sleep without saving ──
+  // Cancel
   const cancelSleep = async () => {
     await AsyncStorage.removeItem(SLEEP_START_KEY);
     stopElapsedTimer();
@@ -320,11 +303,9 @@ export default function SleepScreen() {
     setCancelVisible(false);
   };
 
-  // ─────────────────────────────────────────────
-  // Render helpers
-  // ─────────────────────────────────────────────
+  // Render
 
-  /** Status card shown while user is sleeping */
+  /* Status */
   const renderStatusCard = () => {
     if (!activeSleepISO) return null;
     return (
@@ -350,7 +331,7 @@ export default function SleepScreen() {
     );
   };
 
-  /** History list item */
+  /* History */
   const renderItem = ({ item }: { item: SleepEntry }) => {
     const remark = getSleepRemark(item.duration_hours);
     const durationStr = msToDuration(item.duration_hours * 3_600_000);
@@ -363,7 +344,7 @@ export default function SleepScreen() {
 
         <View style={s.historyTimes}>
           <View style={s.historyTimeBlock}>
-            <Ionicons name="moon-outline" size={16} color="#6ee7b7" />
+            <Ionicons name="moon-outline" size={16} color={colors.accent} />
             <Text style={s.historyTimeLabel}>Sleep</Text>
             <Text style={s.historyTimeValue}>
               {formatPHTime(item.sleep_time)}
@@ -397,33 +378,17 @@ export default function SleepScreen() {
     );
   };
 
-  // ─────────────────────────────────────────────
-  // Loading state
-  // ─────────────────────────────────────────────
-  if (loading) {
-    return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text style={s.loadingText}>Loading your sleep data…</Text>
-      </View>
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  // Main render
-  // ─────────────────────────────────────────────
+  // Layout
   return (
     <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
 
-      {/* ── Top header ── */}
+      {/* Header */}
       <View style={s.topHeader}>
-        <SpringButton style={s.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={26} color="#10b981" />
-        </SpringButton>
         <View style={s.headerTextWrap}>
           <Text style={s.headerSub}>Wellness Tracker</Text>
           <Text style={s.header}>Sleep Logger</Text>
         </View>
+        {loading && <ActivityIndicator size="small" color={colors.accent} />}
       </View>
 
       <FlatList
@@ -437,13 +402,13 @@ export default function SleepScreen() {
         }
         ListHeaderComponent={
           <>
-            {/* ── Live status card ── */}
+            {/* Status */}
             {renderStatusCard()}
 
-            {/* ── Main action area ── */}
+            {/* Actions */}
             <View style={s.actionArea}>
               {activeSleepISO ? (
-                /* ── WAKE UP button (primary action when sleeping) ── */
+                /* Wake */
                 <>
                   <Text style={s.actionHint}>Tap when you wake up</Text>
                   <SpringButton
@@ -469,9 +434,9 @@ export default function SleepScreen() {
                   </SpringButton>
                 </>
               ) : (
-                /* ── SLEEP button (primary action when awake) ── */
+                /* Sleep */
                 <>
-                  <Text style={s.actionHint}>Tap when you're ready to sleep</Text>
+                  <Text style={s.actionHint}>Tap when you&apos;re ready to sleep</Text>
                   <SpringButton style={s.sleepBtn} onPress={handleGoToSleep}>
                     <Ionicons
                       name="moon"
@@ -479,14 +444,14 @@ export default function SleepScreen() {
                       color="#fff"
                       style={s.actionIcon}
                     />
-                    <Text style={s.sleepBtnTxt}>I'm Going to Sleep</Text>
+                    <Text style={s.sleepBtnTxt}>I&apos;m Going to Sleep</Text>
                     <Text style={s.actionSub}>Records current time as sleep start</Text>
                   </SpringButton>
                 </>
               )}
             </View>
 
-            {/* ── History section header ── */}
+            {/* History */}
             {history.length > 0 && (
               <View style={s.historySectionHeader}>
                 <Text style={s.historyTitle}>Recent Sleep Logs</Text>
@@ -497,7 +462,7 @@ export default function SleepScreen() {
         }
       />
 
-      {/* ── Success Remark Modal ── */}
+      {/* Remark */}
       <Modal visible={remarkVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={s.modalContent}>
@@ -506,14 +471,14 @@ export default function SleepScreen() {
                 s.modalIconWrap,
                 {
                   backgroundColor:
-                    (currentRemark?.color ?? "#10b981") + "22",
+                    (currentRemark?.color ?? "#0B6FDB") + "22",
                 },
               ]}
             >
               <Ionicons
                 name="moon"
                 size={40}
-                color={currentRemark?.color ?? "#10b981"}
+                color={currentRemark?.color ?? "#0B6FDB"}
               />
             </View>
 
@@ -525,9 +490,9 @@ export default function SleepScreen() {
                 s.remarkBadge,
                 {
                   backgroundColor:
-                    (currentRemark?.color ?? "#10b981") + "1a",
+                    (currentRemark?.color ?? "#0B6FDB") + "1a",
                   borderColor:
-                    (currentRemark?.color ?? "#10b981") + "66",
+                    (currentRemark?.color ?? "#0B6FDB") + "66",
                   marginBottom: 20,
                 },
               ]}
@@ -535,13 +500,13 @@ export default function SleepScreen() {
               <View
                 style={[
                   s.remarkDot,
-                  { backgroundColor: currentRemark?.color ?? "#10b981" },
+                  { backgroundColor: currentRemark?.color ?? "#0B6FDB" },
                 ]}
               />
               <Text
                 style={[
                   s.remarkBadgeText,
-                  { color: currentRemark?.color ?? "#10b981" },
+                  { color: currentRemark?.color ?? "#0B6FDB" },
                 ]}
               >
                 {currentRemark?.label}
@@ -561,7 +526,7 @@ export default function SleepScreen() {
         </View>
       </Modal>
 
-      {/* ── Cancel Sleep Confirmation Modal ── */}
+      {/* Cancel */}
       <Modal visible={cancelVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={s.modalContent}>
@@ -593,74 +558,45 @@ export default function SleepScreen() {
   );
 }
 
-// ─────────────────────────────────────────────
-// Styles — Premium Emerald Green
-// ─────────────────────────────────────────────
-const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f0fdf4" },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#f0fdf4",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 20,
-    fontSize: 16,
-    color: "#059669",
-    fontWeight: "600",
-  },
+// Styles
+const makeStyles = (c: Colors) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: c.background },
 
-  // ── Header ──
+  // Header
   topHeader: {
-    paddingTop: Platform.OS === "android" ? 48 : 18,
+    paddingTop: 10,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: "#f0fdf4",
+    backgroundColor: c.background,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-  },
-  backButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#ffffff",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#a7f3d0",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
   },
   headerTextWrap: { flex: 1 },
   headerSub: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 2.5,
-    color: "#34d399",
+    color: c.accentDark,
     textTransform: "uppercase",
     marginBottom: 2,
   },
   header: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#064e3b",
+    color: c.textPrimary,
     letterSpacing: -0.3,
   },
 
-  // ── List container ──
+  // List
   listContent: {
     paddingHorizontal: 18,
-    paddingBottom: 100,
+    paddingBottom: 210,
   },
 
-  // ── Status card (shown while sleeping) ──
+  // Status
   statusCard: {
-    backgroundColor: "#064e3b",
+    backgroundColor: "#000000",
     borderRadius: 24,
     padding: 20,
     marginTop: 4,
@@ -668,34 +604,31 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    shadowColor: "#064e3b",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 16,
+    borderWidth: 1.5,
+    borderColor: c.border,
   },
   statusLeft: { flexDirection: "row", alignItems: "center", gap: 14, flex: 1 },
   pulseRing: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#10b98133",
+    backgroundColor: "#0B6FDB33",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#10b98166",
+    borderColor: "#0B6FDB66",
   },
   pulseDot: {
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#34d399",
+    backgroundColor: "#0A4B99",
   },
   statusTextWrap: { flex: 1 },
   statusTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#6ee7b7",
+    color: "#7FB8F5",
     letterSpacing: 0.3,
     marginBottom: 2,
   },
@@ -704,35 +637,35 @@ const s = StyleSheet.create({
   statusElapsed: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#34d399",
+    color: "#0A4B99",
     letterSpacing: -0.5,
   },
   cancelLink: {
     fontSize: 12,
-    color: "#6ee7b7",
+    color: "#7FB8F5",
     fontWeight: "600",
     textDecorationLine: "underline",
   },
 
-  // ── Action area ──
+  // Actions
   actionArea: { marginBottom: 32 },
   actionHint: {
     fontSize: 12,
-    color: "#6b7280",
+    color: c.textSecondary,
     fontWeight: "500",
     textAlign: "center",
     marginBottom: 14,
     letterSpacing: 0.3,
   },
 
-  // ── Sleep button (dark navy-green, moon feel) ──
+  // Button
   sleepBtn: {
-    backgroundColor: "#064e3b",
+    backgroundColor: "#000000",
     borderRadius: 28,
     paddingVertical: 26,
     paddingHorizontal: 24,
     alignItems: "center",
-    shadowColor: "#064e3b",
+    shadowColor: "#000000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
     shadowRadius: 24,
@@ -746,21 +679,21 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
 
-  // ── Wake button (vibrant emerald, sunrise feel) ──
+  // Button
   wakeBtn: {
-    backgroundColor: "#10b981",
+    backgroundColor: c.accent,
     borderRadius: 28,
     paddingVertical: 26,
     paddingHorizontal: 24,
     alignItems: "center",
-    shadowColor: "#10b981",
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.45,
     shadowRadius: 24,
     elevation: 18,
   },
   wakeBtnTxt: {
-    color: "#ffffff",
+    color: c.onAccent,
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: 0.2,
@@ -775,7 +708,7 @@ const s = StyleSheet.create({
     marginTop: 6,
   },
 
-  // ── History ──
+  // History
   historySectionHeader: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -786,25 +719,20 @@ const s = StyleSheet.create({
   historyTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#065f46",
+    color: c.textPrimary,
   },
   historyCount: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#34d399",
+    color: c.accentDark,
   },
   historyCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 20,
     marginBottom: 14,
     borderWidth: 1.5,
-    borderColor: "#d1fae5",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 20,
-    elevation: 10,
+    borderColor: c.border,
   },
   historyCardHeader: {
     flexDirection: "row",
@@ -812,11 +740,11 @@ const s = StyleSheet.create({
     alignItems: "baseline",
     marginBottom: 14,
   },
-  historyDate: { fontSize: 16, fontWeight: "700", color: "#065f46" },
+  historyDate: { fontSize: 16, fontWeight: "700", color: c.textPrimary },
   historyDuration: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#10b981",
+    color: c.accent,
   },
   historyTimes: {
     flexDirection: "row",
@@ -827,19 +755,19 @@ const s = StyleSheet.create({
   historyTimeSep: {
     width: 1,
     height: 36,
-    backgroundColor: "#d1fae5",
+    backgroundColor: c.border,
     marginHorizontal: 12,
   },
   historyTimeLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: c.textSecondary,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  historyTimeValue: { fontSize: 20, fontWeight: "800", color: "#065f46" },
+  historyTimeValue: { fontSize: 20, fontWeight: "800", color: c.textPrimary },
 
-  // ── Remark badge ──
+  // Badge
   remarkBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -855,13 +783,13 @@ const s = StyleSheet.create({
 
   emptyText: {
     textAlign: "center",
-    color: "#94a3b8",
+    color: c.textMuted,
     fontSize: 16,
     marginTop: 60,
     fontStyle: "italic",
   },
 
-  // ── Modal ──
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.65)",
@@ -869,12 +797,12 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   modalContent: {
-    backgroundColor: "#ffffff",
+    backgroundColor: c.surface,
     width: "90%",
     borderRadius: 28,
     padding: 28,
     alignItems: "center",
-    shadowColor: "#10b981",
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.22,
     shadowRadius: 28,
@@ -891,41 +819,41 @@ const s = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: "900",
-    color: "#065f46",
+    color: c.textPrimary,
     marginBottom: 6,
     letterSpacing: -0.3,
   },
   remarkDuration: {
     fontSize: 38,
     fontWeight: "900",
-    color: "#064e3b",
+    color: c.textPrimary,
     letterSpacing: -1,
     marginBottom: 16,
   },
   suggestionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#059669",
+    color: c.textSecondary,
     alignSelf: "flex-start",
     marginBottom: 6,
   },
   suggestionText: {
     fontSize: 15,
     fontWeight: "400",
-    color: "#374151",
+    color: c.textSecondary,
     lineHeight: 22,
     textAlign: "left",
     alignSelf: "stretch",
   },
   confirmBtn: {
-    backgroundColor: "#10b981",
+    backgroundColor: c.accent,
     paddingVertical: 16,
     borderRadius: 20,
     alignItems: "center",
   },
-  confirmTxt: { fontSize: 17, fontWeight: "800", color: "#fff" },
+  confirmTxt: { fontSize: 17, fontWeight: "800", color: c.onAccent },
 
-  // ── Cancel modal buttons ──
+  // Cancel
   cancelModalBtns: {
     flexDirection: "row",
     gap: 12,
@@ -937,11 +865,11 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 18,
     alignItems: "center",
-    backgroundColor: "#ecfdf5",
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1.5,
-    borderColor: "#a7f3d0",
+    borderColor: c.border,
   },
-  cancelModalKeepTxt: { fontSize: 15, fontWeight: "700", color: "#065f46" },
+  cancelModalKeepTxt: { fontSize: 15, fontWeight: "700", color: c.textPrimary },
   cancelModalDiscard: {
     flex: 1,
     paddingVertical: 14,

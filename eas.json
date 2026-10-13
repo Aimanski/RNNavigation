@@ -14,7 +14,8 @@
         "buildType": "apk"
       },
       "distribution": "store",
-      "channel": "preview"
+      "channel": "preview",
+      "autoIncrement": true
     },
     "production": {
       "android": {

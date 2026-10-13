@@ -1,39 +1,55 @@
 // @ts-nocheck
+// Admin
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
-    const { user_id } = await req.json();
-
-    if (!user_id) {
-      return new Response(JSON.stringify({ error: "user_id is required" }), {
-        status: 400,
-      });
-    }
-
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
+    // Authorization
+    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const { data: callerData, error: callerError } = await supabaseAdmin.auth.getUser(token);
+    if (callerError || !callerData?.user) return json({ error: "You need to be signed in." }, 401);
 
-    if (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-      });
+    const { data: callerProfile } = await supabaseAdmin
+      .from("weighApp")
+      .select("admin")
+      .eq("id", callerData.user.id)
+      .maybeSingle();
+    if (callerProfile?.admin !== true) return json({ error: "Only admins can delete users." }, 403);
+
+    const { user_id } = await req.json().catch(() => ({}));
+    if (!user_id || typeof user_id !== "string") return json({ error: "user_id is required" }, 400);
+    if (user_id === callerData.user.id) {
+      return json({ error: "You can't delete your own account from the admin panel." }, 400);
     }
 
-    // Also delete from weighApp table just in case
-    await supabaseAdmin
-      .from("weighApp")
-      .delete()
-      .eq("id", user_id);
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
+    if (error) return json({ error: error.message }, 500);
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    // Cleanup
+    await supabaseAdmin.from("weighApp").delete().eq("id", user_id);
+
+    return json({ success: true });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-    });
+    return json({ error: err.message }, 500);
   }
 });

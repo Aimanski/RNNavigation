@@ -1,27 +1,18 @@
-// providers/AuthProvider.tsx
-//
-// WHAT CHANGED vs previous version:
-//
-// REMOVED: The `isFreshVerification` timing check (email_confirmed_at < 30s).
-//   That check was the root cause of the bug. When a user who already verified
-//   their email signed in with Google, Supabase linked the accounts and updated
-//   email_confirmed_at — making it look "fresh". AuthProvider then blocked
-//   navigation, leaving the user stuck on "Verifying email…" forever.
-//
-// INSTEAD: AuthProvider now fully delegates email-verification flow control
-//   to callback.tsx. callback.tsx calls signOut() after email verification,
-//   which fires SIGNED_OUT here. We detect that via `isPostVerificationSignOut`
-//   flag and skip our own redirect.
-//
-// For ALL other SIGNED_IN events (including Google OAuth), AuthProvider
-// navigates normally. No timing hacks needed.
+// Auth
 
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { ensureProfileExists } from "../lib/ensureProfileExists";
-import { navigateAfterLogin } from "../lib/navigateAfterLogin";
+import BrandLogo from "../components/brand/BrandLogo";
+import { cache } from "../lib/cache";
+import { ensureProfileExists } from "../lib/auth/ensureProfileExists";
+import { navigateAfterLogin, resetNavigationGuard } from "../lib/auth/navigateAfterLogin";
+import { resetTo } from "../lib/navigation";
+import { refreshSignupWindowIfUnverified } from "../lib/auth/signupWindow";
+import { usePageReady } from "../lib/auth/startup";
 import { supabase } from "../lib/supabase";
+import { useTheme } from "./ThemeProvider";
 
 interface Props {
   children: React.ReactNode;
@@ -29,116 +20,91 @@ interface Props {
 
 export function AuthProvider({ children }: Props) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { colors } = useTheme();
+  const pathname = usePathname();
+  const pageReady = usePageReady();
+  // Startup
+  const [checked, setChecked] = useState(false);
+  const [hadSession, setHadSession] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  const [done, setDone] = useState(false);
   const handledSessionRef = useRef<string | null>(null);
-
-  // Set to true by the SIGNED_IN handler when provider="email" + type="signup",
-  // so the subsequent SIGNED_OUT (from callback.tsx's signOut()) doesn't
-  // redirect us to "/" a second time — callback.tsx already does that.
-  const isPostVerificationSignOut = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
-    // ── 1. Restore existing session on app start ──────────────────────────
+    // Restore
     const recoverSession = async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
         if (error) console.warn("[AuthProvider] getSession error:", error.message);
 
         if (data.session?.user && mounted) {
-          handledSessionRef.current = data.session.access_token;
-          await ensureProfileExists(data.session.user);
-          await new Promise((r) => setTimeout(r, 300));
-          await navigateAfterLogin(data.session.user.id, router);
+          const user = data.session.user;
+          handledSessionRef.current = user.id;
+          setHadSession(true);
+
+          // Profile
+          const readyKey = `profile_ready_${user.id}`;
+          const alreadyReady = (await AsyncStorage.getItem(readyKey).catch(() => null)) === "1";
+          if (!alreadyReady) {
+            await ensureProfileExists(user);
+            AsyncStorage.setItem(readyKey, "1").catch(() => {});
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          await navigateAfterLogin(user.id, router);
         }
       } catch (e: any) {
         console.warn("[AuthProvider] recoverSession caught:", e.message);
       } finally {
-        if (mounted) setReady(true);
+        if (mounted) setChecked(true);
       }
     };
 
     recoverSession();
 
-    // ── 2. Listen for auth state changes ─────────────────────────────────
+    // Listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Lock
       if (!mounted) return;
 
       if (
         (event === "SIGNED_IN" || event === "USER_UPDATED") &&
         session?.user
       ) {
-        // De-duplicate: skip if we already handled this exact access token
-        if (handledSessionRef.current === session.access_token) {
-          if (mounted && !ready) setReady(true);
-          return;
-        }
+        // Deduplication
+        if (handledSessionRef.current === session.user.id) return;
 
-        handledSessionRef.current = session.access_token;
-        if (mounted) setReady(true);
+        handledSessionRef.current = session.user.id;
 
-        const provider = session.user.app_metadata?.provider;
-
-        // ── Email verification flow ────────────────────────────────────────
-        // When callback.tsx exchanges a `type=signup` code, the provider is
-        // "email". callback.tsx will call signOut() right after — so we flag
-        // that the upcoming SIGNED_OUT is post-verification and skip our redirect.
-        // We do NOT navigate here; callback.tsx handles the UX ("✅ Verified").
-        if (provider === "email") {
-          // Check whether this is a brand-new verification (no existing session)
-          // vs a normal email/password login. We distinguish by checking if the
-          // user has just been confirmed (confirmed_at equals updated_at closely).
-          const confirmedAt = session.user.email_confirmed_at
-            ? new Date(session.user.email_confirmed_at).getTime()
-            : null;
-          const updatedAt = session.user.updated_at
-            ? new Date(session.user.updated_at).getTime()
-            : null;
-
-          // If confirmed_at and updated_at are within 5 seconds of each other,
-          // this is a fresh email confirmation event from callback.tsx.
-          // Normal email/password logins don't update confirmed_at.
-          const isFreshConfirmation =
-            confirmedAt !== null &&
-            updatedAt !== null &&
-            Math.abs(confirmedAt - updatedAt) < 5_000;
-
-          if (isFreshConfirmation) {
-            isPostVerificationSignOut.current = true;
-            return; // callback.tsx handles sign-out + redirect
+        // Navigation
+        const signedInUser = session.user;
+        setTimeout(async () => {
+          if (!mounted) return;
+          try {
+            await ensureProfileExists(signedInUser);
+            // Signup
+            await refreshSignupWindowIfUnverified(signedInUser.id);
+            await new Promise((r) => setTimeout(r, 500));
+            await navigateAfterLogin(signedInUser.id, router);
+          } catch (e: any) {
+            console.warn("[AuthProvider] post-auth navigation error:", e.message);
+            resetTo(router, "/survey");
           }
-        }
-
-        // ── All other sign-ins: Google OAuth, email/password login ────────
-        try {
-          await ensureProfileExists(session.user);
-          await new Promise((r) => setTimeout(r, 500));
-          await navigateAfterLogin(session.user.id, router);
-        } catch (e: any) {
-          console.warn("[AuthProvider] post-auth navigation error:", e.message);
-          router.replace("/survey");
-        }
+        }, 0);
       }
 
       if (event === "SIGNED_OUT") {
         handledSessionRef.current = null;
-
-        if (isPostVerificationSignOut.current) {
-          // This SIGNED_OUT was triggered by callback.tsx after email verification.
-          // callback.tsx already handles the redirect — skip ours.
-          isPostVerificationSignOut.current = false;
-          if (mounted && !ready) setReady(true);
-          return;
-        }
-
-        // Real user sign-out — go to login
-        router.replace("/");
+        resetNavigationGuard();
+        setHadSession(false);
+        // Cache
+        cache.clear();
+        // Logout
+        resetTo(router, "/");
       }
-
-      if (mounted && !ready) setReady(true);
     });
 
     return () => {
@@ -148,22 +114,42 @@ export function AuthProvider({ children }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!ready) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#10b981" />
-      </View>
-    );
-  }
+  // Timeout
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
 
-  return <>{children}</>;
+  // Splash
+  const onDataPage = pathname === "/main" || pathname === "/admin";
+  const canHide = timedOut || (checked && (!hadSession || (pathname !== "/" && (!onDataPage || pageReady))));
+  useEffect(() => {
+    if (canHide) setDone(true);
+  }, [canHide]);
+
+  // Rendering
+  return (
+    <>
+      {children}
+      {!done && (
+        <View style={[styles.loader, { backgroundColor: colors.background }]} pointerEvents="auto">
+          <View style={styles.loaderInner}>
+            <BrandLogo variant="full" width={160} />
+            <ActivityIndicator size="small" color={colors.accent} style={styles.loaderSpinner} />
+          </View>
+        </View>
+      )}
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
   loader: {
-    flex: 1,
-    backgroundColor: "#f8fff9",
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
   },
+  // Layout
+  loaderInner: { alignItems: "center" },
+  loaderSpinner: { position: "absolute", top: "100%", marginTop: 28 },
 });

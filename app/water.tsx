@@ -1,39 +1,40 @@
-// app/water.tsx — WATER INTAKE TRACKER SCREEN (FIXED HEADER VERSION)
+// Water
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
+import { Text } from "../components/ui/AppText";
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from "../lib/supabase";
+import { getSessionUser } from "../lib/auth/session";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
-// ────────────────────────────────
-// Philippines Time Helpers (UTC+8)
-// ────────────────────────────────
+// Timezone
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000; 
 
-// ────────────────────────────────
 // Constants
-// ────────────────────────────────
 const WATER_GOAL_ML = 2500; 
 const ADD_AMOUNTS = [250, 500]; 
 
 export default function WaterScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const [todayIntake, setTodayIntake] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
 
-  // Helper: Get UTC timestamp for 00:00:00 PH time today
+  // Timezone
   const getPHDayStartUTC = (): string => {
     const now = new Date();
     const phDayStart = new Date(now.getTime() + PH_OFFSET_MS);
@@ -41,16 +42,15 @@ export default function WaterScreen() {
     return phDayStart.toISOString(); 
   };
   
-  // 1. Fetch daily water intake
+  // Fetch
   const fetchData = useCallback(async () => {
     setLoading(true);
     let user;
     try {
-      const authResponse = await supabase.auth.getUser();
-      user = authResponse.data.user;
+      user = await getSessionUser();
 
       if (!user) {
-        router.replace("/index");
+        router.replace("/");
         return;
       }
       
@@ -82,14 +82,14 @@ export default function WaterScreen() {
     }
   }, [router]); 
 
-  // 2. Focus effect + real-time subscription
+  // Subscription
   useFocusEffect(
     useCallback(() => {
       fetchData(); 
 
       let subscription: any;
       const setupSubscription = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getSessionUser();
         if (!user) return; 
 
         subscription = supabase
@@ -118,13 +118,13 @@ export default function WaterScreen() {
     }, [fetchData]) 
   );
 
-  // 3. Add water
+  // Logging
   const addWater = async (amount: number) => {
     if (isAdding) return;
     setIsAdding(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       const { error } = await supabase.from("water_intake").insert({
@@ -145,9 +145,9 @@ export default function WaterScreen() {
     }
   };
 
-  // 4. Reset daily intake
+  // Reset
   const resetDailyIntake = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
 
     Alert.alert(
@@ -195,26 +195,21 @@ export default function WaterScreen() {
     );
   };
 
-  // 5. Progress calculation
+  // Progress
   const progress = Math.min((todayIntake / WATER_GOAL_ML) * 100, 100);
   const circumference = 2 * Math.PI * 80;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
   const isGoalReached = todayIntake >= WATER_GOAL_ML;
 
-  // ────────────────────────────────
-  // RENDER
-  // ────────────────────────────────
+  // Render
   return (
     <View style={s.container}>
-      {/* FIXED HEADER - Stays on top */}
-      <View style={s.fixedHeader}>
-        <Pressable onPress={() => router.back()} style={s.backButton}>
-          <Ionicons name="arrow-back" size={32} color="#10b981" />
-        </Pressable>
-        <Text style={s.header}>WATER INTAKE</Text>
+      {/* Header */}
+      <View style={s.headerContainer}>
+        <Text style={s.header}>Water Intake</Text>
       </View>
 
-      {/* SCROLLABLE CONTENT */}
+      {/* Scroll */}
       <ScrollView
         style={s.scrollView}
         contentContainerStyle={s.scrollContent}
@@ -222,14 +217,14 @@ export default function WaterScreen() {
       >
         {loading ? (
           <View style={s.loadingContainer}>
-            <ActivityIndicator size="large" color="#10b981" />
+            <ActivityIndicator size="large" color={colors.accent} />
             <Text style={s.loadingText}>Loading your water data...</Text>
           </View>
         ) : (
           <>
-            {/* Progress Section */}
-            <View style={s.progressContainer}>
-              <Text style={s.progressTitle}>Daily Hydration Goal</Text>
+            {/* Progress */}
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Daily Hydration Goal</Text>
               <View style={s.chartWrapper}>
                 <Svg width="200" height="200" viewBox="0 0 200 200">
                   <Circle
@@ -237,7 +232,7 @@ export default function WaterScreen() {
                     cy="100"
                     r="80"
                     fill="none"
-                    stroke="#ecfdf5"
+                    stroke={colors.surfaceAlt}
                     strokeWidth="20"
                   />
                   <Circle
@@ -245,7 +240,7 @@ export default function WaterScreen() {
                     cy="100"
                     r="80"
                     fill="none"
-                    stroke={isGoalReached ? "#34d399" : "#3b82f6"}
+                    stroke={isGoalReached ? colors.accentDark : colors.accent}
                     strokeWidth="20"
                     strokeDasharray={circumference}
                     strokeDashoffset={strokeDashoffset}
@@ -260,14 +255,26 @@ export default function WaterScreen() {
                 </View>
               </View>
 
-              <Text style={[s.statusText, { color: isGoalReached ? "#059669" : "#3b82f6" }]}>
-                {isGoalReached ? "Goal Reached! Excellent!" : `${WATER_GOAL_ML - todayIntake} ml remaining`}
-              </Text>
+              <View style={s.statusPill}>
+                <Ionicons
+                  name={isGoalReached ? "checkmark-circle" : "water"}
+                  size={20}
+                  color={colors.accent}
+                />
+                <Text style={s.statusText}>
+                  {isGoalReached ? "Goal Reached! Excellent!" : `${WATER_GOAL_ML - todayIntake} ml remaining`}
+                </Text>
+              </View>
+
+              <View style={s.barTrack}>
+                <View style={[s.barFill, { width: `${progress}%` }]} />
+              </View>
+              <Text style={s.percentText}>{Math.round(progress)}% of daily goal</Text>
             </View>
 
-            {/* Quick Add Buttons */}
-            <View style={s.section}>
-              <Text style={s.sectionTitle}>Quick Add</Text>
+            {/* Shortcuts */}
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Quick Add</Text>
               <View style={s.buttonGrid}>
                 {ADD_AMOUNTS.map((amount) => (
                   <Pressable
@@ -276,7 +283,7 @@ export default function WaterScreen() {
                     onPress={() => addWater(amount)}
                     disabled={isAdding}
                   >
-                    <Ionicons name="add-circle-outline" size={30} color="#3b82f6" />
+                    <Ionicons name="add-circle-outline" size={30} color={colors.accent} />
                     <Text style={s.buttonText}>{amount} ml</Text>
                   </Pressable>
                 ))}
@@ -285,7 +292,7 @@ export default function WaterScreen() {
                   onPress={() => addWater(1000)}
                   disabled={isAdding}
                 >
-                  <Ionicons name="add-circle" size={30} color="#3b82f6" />
+                  <Ionicons name="add-circle" size={30} color={colors.accent} />
                   <Text style={s.buttonText}>1.0 L</Text>
                 </Pressable>
                 <Pressable
@@ -294,16 +301,16 @@ export default function WaterScreen() {
                   disabled={isAdding}
                 >
                   {isAdding ? (
-                    <ActivityIndicator color="#f87171" size="small" />
+                    <ActivityIndicator color="#ef4444" size="small" />
                   ) : (
-                    <Ionicons name="refresh-circle-outline" size={30} color="#f87171" />
+                    <Ionicons name="refresh-circle-outline" size={30} color="#ef4444" />
                   )}
-                  <Text style={[s.buttonText, { color: "#f87171" }]}>Reset</Text>
+                  <Text style={[s.buttonText, { color: "#ef4444" }]}>Reset</Text>
                 </Pressable>
               </View>
             </View>
 
-            <View style={{ height: 60 }} />
+            <View style={{ height: 20 }} />
           </>
         )}
       </ScrollView>
@@ -311,170 +318,174 @@ export default function WaterScreen() {
   );
 }
 
-// ────────────────────────────────
 // Styles
-// ────────────────────────────────
-const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fff9",
-  },
-  fixedHeader: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#f8fff9",
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    zIndex: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(16, 185, 129, 0.1)",
-  },
-  backButton: {
-    position: "absolute",
-    top: 60,
-    left: 20,
-    zIndex: 20,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  header: {
-    fontSize: 25,
-    fontWeight: "800",
-    color: "#065f46",
-    textAlign: "center",
-    marginTop: 20,
-  },
-  scrollView: {
-    flex: 1,
-    marginTop: 140, // Space for fixed header (safe area + back button + padding)
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 100,
-  },
-  loadingText: {
-    marginTop: 20,
-    fontSize: 18,
-    color: "#059669",
-    fontWeight: "600",
-  },
-  section: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 16,
-    borderWidth: 1.5,
-    borderColor: "#ecfdf5",
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#065f46",
-    marginBottom: 20,
-  },
-  progressContainer: {
-    alignItems: "center",
-    marginBottom: 32,
-    paddingTop: 16,
-  },
-  progressTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#065f46",
-    marginBottom: 20,
-  },
-  chartWrapper: {
-    width: 200,
-    height: 200,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  progressTextOverlay: {
-    position: "absolute",
-    alignItems: "center",
-  },
-  currentIntakeText: {
-    fontSize: 48,
-    fontWeight: "900",
-    color: "#3b82f6",
-    lineHeight: 52,
-  },
-  intakeUnit: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#3b82f6",
-  },
-  goalText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#059669",
-    marginTop: 8,
-  },
-  statusText: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  buttonGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-around",
-    gap: 16,
-    width: "100%",
-  },
-  addButton: {
-    backgroundColor: "#f0fdf4",
-    borderRadius: 20,
-    padding: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    width: "45%",
-    borderWidth: 2,
-    borderColor: "#bfdbfe",
-  },
-  largeButton: {
-    backgroundColor: "#e0f2fe",
-    borderColor: "#93c5fd",
-  },
-  resetButton: {
-    backgroundColor: "#fef2f2",
-    borderColor: "#fca5a5",
-    width: "45%",
-    minHeight: 80,
-    justifyContent: "center",
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#3b82f6",
-    marginTop: 8,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-});
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    pressed: { opacity: 0.7 },
+
+    headerContainer: {
+      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingBottom: 16,
+      paddingHorizontal: 20,
+      backgroundColor: c.background,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    backButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.surface,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    header: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.textPrimary,
+    },
+    headerSpacer: { width: 44 },
+
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 20,
+      paddingTop: 4,
+      paddingBottom: 40,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      marginTop: 100,
+    },
+    loadingText: {
+      marginTop: 20,
+      fontSize: 18,
+      color: c.textSecondary,
+      fontWeight: "600",
+    },
+
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      padding: 20,
+      marginBottom: 16,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      alignItems: "center",
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.textPrimary,
+      marginBottom: 16,
+    },
+
+    chartWrapper: {
+      width: 200,
+      height: 200,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    progressTextOverlay: {
+      position: "absolute",
+      alignItems: "center",
+    },
+    currentIntakeText: {
+      fontSize: 48,
+      fontWeight: "900",
+      color: c.accent,
+      lineHeight: 52,
+    },
+    intakeUnit: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.accent,
+    },
+    goalText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.textSecondary,
+      marginTop: 6,
+    },
+
+    statusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      marginBottom: 16,
+    },
+    statusText: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.textPrimary,
+      textAlign: "center",
+    },
+    barTrack: {
+      width: "100%",
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: c.surfaceAlt,
+      overflow: "hidden",
+    },
+    barFill: {
+      height: "100%",
+      borderRadius: 5,
+      backgroundColor: c.accent,
+    },
+    percentText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.textMuted,
+      marginTop: 8,
+    },
+
+    buttonGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      rowGap: 12,
+      width: "100%",
+    },
+    addButton: {
+      backgroundColor: c.background,
+      borderRadius: 16,
+      paddingVertical: 16,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      width: "48%",
+      minHeight: 88,
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    largeButton: {
+      backgroundColor: c.surfaceAlt,
+      borderColor: c.borderStrong,
+    },
+    resetButton: {
+      backgroundColor: c.background,
+      borderColor: "#ef4444",
+    },
+    buttonText: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.textPrimary,
+      marginTop: 6,
+    },
+  });

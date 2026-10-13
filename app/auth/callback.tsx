@@ -1,158 +1,186 @@
-// app/auth/callback.tsx
-//
-// Handles TWO completely different redirect types:
-//
-//  [A] Google OAuth  → weighapp://auth/callback?code=xxxx
-//      • exchangeCodeForSession → provider = "google"
-//      • Keep session alive → navigate into app
-//
-//  [B] Email verification → weighapp://auth/callback?token_hash=xxxx&type=signup
-//                        OR weighapp://auth/callback?code=xxxx  (PKCE email confirm)
-//      • Exchange code → provider = "email"
-//      • Sign out → show "✅ Verified" → redirect to login
-//
-// THE BUG THIS FIXES:
-//   A user who first signed up via email (verified), then signs in with Google
-//   on the same email. Supabase links the accounts. The Google OAuth redirect
-//   comes back with provider="google" but a FRESH email_confirmed_at timestamp
-//   (because Supabase just linked them). AuthProvider was treating this fresh
-//   timestamp as a "just verified email" and blocking navigation.
-//
-//   Fix: We determine the flow type from the URL params (`type` param or the
-//   provider on the decoded session), NOT from email_confirmed_at timing.
+// Callback
 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { ensureProfileExists } from "../../lib/ensureProfileExists";
-import { navigateAfterLogin } from "../../lib/navigateAfterLogin";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { Text } from "../../components/ui/AppText";
+import { ensureProfileExists } from "../../lib/auth/ensureProfileExists";
+import { navigateAfterLogin } from "../../lib/auth/navigateAfterLogin";
+import { refreshSignupWindowIfUnverified } from "../../lib/auth/signupWindow";
 import { supabase } from "../../lib/supabase";
+import { useTheme } from "../../providers/ThemeProvider";
 
-type Status = "loading" | "verified" | "error";
+type Status = "loading" | "error";
+
+// Verification
+const VERIFICATION_WINDOW_MS = 2 * 60 * 1000;
 
 export default function AuthCallback() {
   const router = useRouter();
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{
     code?: string;
-    type?: string;           // "signup" | "recovery" | "invite" — email flows only
-    token_hash?: string;     // older email confirmation style
+    type?: string;           // Params
+    token_hash?: string;     // Confirmation
+    purpose?: string;        // Verification
     error?: string;
     error_description?: string;
   }>();
   const handled = useRef(false);
   const [status, setStatus] = useState<Status>("loading");
+  // Cleanup
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    const all = timers.current;
+    return () => all.forEach(clearTimeout);
+  }, []);
 
   useEffect(() => {
+    // Navigation
+    const clearScreenStack = () => {
+      if (router.canDismiss()) router.dismissAll();
+    };
+
     const handleCallback = async () => {
       if (handled.current) return;
       handled.current = true;
 
+      // Session
+      const completeSignIn = async (user: any) => {
+        await ensureProfileExists(user);
+
+        if (params.purpose === "verify") {
+          // Expiry
+          const { data: profile } = await supabase
+            .from("weighApp")
+            .select("signup_started_at, email_code_verified")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          const startedAt = profile?.signup_started_at
+            ? new Date(profile.signup_started_at).getTime()
+            : 0;
+          const abandoned =
+            !profile?.email_code_verified && Date.now() - startedAt > VERIFICATION_WINDOW_MS;
+
+          if (abandoned) {
+            await supabase.auth.signOut();
+            throw new Error(
+              "This verification link expired. Please sign in with Google again."
+            );
+          }
+
+          await supabase.from("weighApp").update({ email_code_verified: true }).eq("id", user.id);
+        } else {
+          // Window
+          await refreshSignupWindowIfUnverified(user.id);
+        }
+
+        if (params.purpose === "verify") {
+          // Navigation
+          clearScreenStack();
+          await navigateAfterLogin(user.id, router);
+          return;
+        }
+
+        // Redirect
+        timers.current.push(
+          setTimeout(() => {
+            clearScreenStack();
+            navigateAfterLogin(user.id, router);
+          }, 6000)
+        );
+      };
+
       try {
-        // ── Supabase returned an error in the URL ────────────────────────
+        // Errors
         if (params.error) {
           throw new Error(params.error_description || params.error);
         }
 
         const code = params.code;
-        const urlType = params.type; // present for email confirmation flows
-
-        // ── Determine flow type BEFORE exchanging the code ───────────────
-        //
-        // Email confirmation URLs look like:
-        //   ?code=xxxx&type=signup
-        //   ?token_hash=xxxx&type=signup
-        //
-        // Google OAuth URLs look like:
-        //   ?code=xxxx               (no `type` param)
-        //
-        // We use the presence of `type` param as the primary signal.
-        // This is reliable because Google never sends a `type` param.
-        const isEmailFlow = !!urlType || !!params.token_hash;
 
         if (!code && !params.token_hash) {
-          // No code at all — check if session was already set (e.g. implicit flow)
-          await new Promise((r) => setTimeout(r, 800));
-          const { data: sessionData } = await supabase.auth.getSession();
+          // Implicit
+          const sessionUser = await new Promise<any>((resolve) => {
+            let settled = false;
+            const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+              if (settled || !session?.user) return;
+              settled = true;
+              sub.subscription.unsubscribe();
+              resolve(session.user);
+            });
+            setTimeout(async () => {
+              if (settled) return;
+              settled = true;
+              sub.subscription.unsubscribe();
+              const { data: fallback } = await supabase.auth.getSession();
+              resolve(fallback.session?.user ?? null);
+            }, 4000);
+          });
 
-          if (sessionData.session?.user) {
-            const provider = sessionData.session.user.app_metadata?.provider;
-            if (provider === "google") {
-              // Google implicit flow — navigate into app
-              await ensureProfileExists(sessionData.session.user);
-              await navigateAfterLogin(sessionData.session.user.id, router);
-              return;
-            }
-            // Email implicit — sign out and go to login
-            await ensureProfileExists(sessionData.session.user);
-            await supabase.auth.signOut();
-            setStatus("verified");
-            setTimeout(() => router.replace("/"), 2500);
+          if (sessionUser) {
+            await completeSignIn(sessionUser);
             return;
           }
           throw new Error("No auth code and no active session.");
         }
 
-        // ── Exchange code for session ────────────────────────────────────
+        // Exchange
         const { data, error } = await supabase.auth.exchangeCodeForSession(code!);
         if (error) throw error;
         if (!data.session?.user) throw new Error("No user in session after exchange.");
 
-        const user = data.session.user;
-        const provider = user.app_metadata?.provider;
-
-        // ── GOOGLE OAUTH ─────────────────────────────────────────────────
-        // Condition: provider is google, OR no `type` param in URL
-        // This correctly handles the case where a user who already verified
-        // their email then signs in with Google — Supabase links accounts,
-        // provider stays "google", and we must navigate INTO the app.
-        if (provider === "google" || !isEmailFlow) {
-          await ensureProfileExists(user);
-          await navigateAfterLogin(user.id, router);
-          return;
-        }
-
-        // ── EMAIL VERIFICATION ───────────────────────────────────────────
-        // type=signup/recovery/invite → verify complete → sign out → login
-        await ensureProfileExists(user);
-        await supabase.auth.signOut();
-        setStatus("verified");
-        setTimeout(() => router.replace("/"), 2500);
+        await completeSignIn(data.session.user);
 
       } catch (err: any) {
-        console.error("[callback] error:", err.message);
+        console.warn("[callback] error:", err.message);
+
+        // Retry
+        try {
+          const { data: existing } = await supabase.auth.getSession();
+          const existingUser = existing.session?.user;
+          if (existingUser) {
+            timers.current.push(
+              setTimeout(() => {
+                // Fallback
+                navigateAfterLogin(existingUser.id, router);
+              }, 6000)
+            );
+            return;
+          }
+        } catch {
+          // Fallback
+        }
+
         setStatus("error");
-        setTimeout(() => router.replace("/"), 3000);
+        timers.current.push(
+          setTimeout(() => {
+            clearScreenStack();
+            router.replace("/");
+          }, 3000)
+        );
       }
     };
 
     handleCallback();
-  }, []);
+  }, [params.code, params.error, params.error_description, params.token_hash, params.type, params.purpose, router]);
 
-  // ── UI ──────────────────────────────────────────────────────────────────
+  // Layout
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {status === "loading" && (
         <>
-          <ActivityIndicator size="large" color="#10b981" />
-          <Text style={s.text}>Please wait…</Text>
-        </>
-      )}
-
-      {status === "verified" && (
-        <>
-          <Text style={s.emoji}>✅</Text>
-          <Text style={s.title}>Email Verified!</Text>
-          <Text style={s.text}>
-            Your account is ready.{"\n"}Taking you to login…
-          </Text>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={[s.text, { color: colors.textSecondary }]}>Please wait…</Text>
         </>
       )}
 
       {status === "error" && (
         <>
           <Text style={s.emoji}>⚠️</Text>
-          <Text style={s.title}>Something went wrong</Text>
-          <Text style={s.text}>
+          <Text style={[s.title, { color: colors.textPrimary }]}>Something went wrong</Text>
+          <Text style={[s.text, { color: colors.textSecondary }]}>
             Taking you back to login…
           </Text>
         </>
@@ -166,7 +194,7 @@ const s = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fff9",
+    backgroundColor: "#FFFFFF",
     gap: 16,
     paddingHorizontal: 40,
   },
@@ -174,12 +202,12 @@ const s = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#065f46",
+    color: "#000000",
     textAlign: "center",
   },
   text: {
     fontSize: 16,
-    color: "#059669",
+    color: "#4D4D4D",
     fontWeight: "600",
     textAlign: "center",
     lineHeight: 24,

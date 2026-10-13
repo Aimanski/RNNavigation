@@ -1,9 +1,10 @@
-// app/signup.tsx
+// Signup
 
 import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,18 +14,20 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { ensureProfileExists } from "../lib/ensureProfileExists";
-import { navigateAfterLogin } from "../lib/navigateAfterLogin";
+import { Text } from "../components/ui/AppText";
+import AuthField from "../components/ui/AuthField";
+import BrandLogo from "../components/brand/BrandLogo";
+import GoogleButton from "../components/ui/GoogleButton";
 import { supabase } from "../lib/supabase";
+import { goBackOr } from "../lib/navigation";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 const isRateLimitError = (message: string): boolean => {
   const msg = message.toLowerCase();
@@ -37,10 +40,12 @@ const isRateLimitError = (message: string): boolean => {
   );
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// Component
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -49,7 +54,7 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
 
-  // ─── GOOGLE SIGN-IN ──────────────────────────────────────────────────────────
+  // Google
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
@@ -71,61 +76,48 @@ export default function SignUpScreen() {
       if (oauthError) throw oauthError;
       if (!oauthData.url) throw new Error("No OAuth URL returned from Supabase");
 
-      const result = await WebBrowser.openAuthSessionAsync(
-        oauthData.url,
-        redirectUrl,
-        { showInRecents: true }
-      );
+      // Browser
+      const result = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectUrl);
 
       if (result.type !== "success" || !result.url) return;
 
       const returnedUrl = result.url;
 
-      // Strategy A: PKCE
+      // Session
+
+      // PKCE
       try {
         const urlObj = new URL(returnedUrl);
         const code = urlObj.searchParams.get("code");
         if (code) {
-          const { data: sessionData, error: sessionError } =
-            await supabase.auth.exchangeCodeForSession(code);
+          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
           if (sessionError) throw sessionError;
-          if (sessionData.session?.user) {
-            await ensureProfileExists(sessionData.session.user);
-            await navigateAfterLogin(sessionData.session.user.id, router);
-            return;
-          }
+          return;
         }
       } catch {
-        // fall through
+        // Fallback
       }
 
-      // Strategy B: Implicit
+      // Implicit
       const fragment = returnedUrl.split("#")[1];
       if (fragment) {
         const params = new URLSearchParams(fragment);
         const accessToken = params.get("access_token");
         const refreshToken = params.get("refresh_token");
         if (accessToken && refreshToken) {
-          const { data: sessionData, error: sessionError } =
-            await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
           if (sessionError) throw sessionError;
-          if (sessionData.user) {
-            await ensureProfileExists(sessionData.user);
-            await navigateAfterLogin(sessionData.user.id, router);
-            return;
-          }
+          return;
         }
       }
 
-      // Strategy C: poll session
+      // Polling
       await new Promise((r) => setTimeout(r, 500));
       const { data: existing } = await supabase.auth.getSession();
       if (existing.session?.user) {
-        await ensureProfileExists(existing.session.user);
-        await navigateAfterLogin(existing.session.user.id, router);
         return;
       }
 
@@ -140,7 +132,7 @@ export default function SignUpScreen() {
     }
   };
 
-  // ─── EMAIL SIGN-UP ───────────────────────────────────────────────────────────
+  // Signup
   const handleEmailSignUp = async () => {
     if (!username.trim()) return Alert.alert("Missing Username", "Please enter a username.");
     if (!email.trim()) return Alert.alert("Missing Email", "Please enter your email address.");
@@ -156,11 +148,8 @@ export default function SignUpScreen() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: "weighapp://auth/callback",
           data: {
-            // Persisted in auth.users.raw_user_meta_data.
-            // ensureProfileExists reads this after verification to populate
-            // the weighApp row — no early insert needed.
+            // Metadata
             pending_username: username.trim(),
           },
         },
@@ -190,8 +179,7 @@ export default function SignUpScreen() {
         throw error;
       }
 
-      // ── Soft conflict: identities === [] means email already taken ────────
-      // Supabase returns no error but the signUp was a no-op.
+      // Duplicate
       if (data.user && (data.user.identities?.length ?? 0) === 0) {
         await handleEmailAlreadyExists(email.trim());
         return;
@@ -199,16 +187,16 @@ export default function SignUpScreen() {
 
       if (!data.user) throw new Error("No user returned after signup.");
 
-      // ── DO NOT insert into weighApp here ─────────────────────────────────
-      // The user hasn't verified yet — no valid session exists.
-      // ensureProfileExists runs after verification via AuthProvider's
-      // onAuthStateChange listener, using pending_username from metadata.
+      // Session
+      if (data.session) {
+        await supabase.auth.signOut();
+        await handleEmailAlreadyExists(email.trim());
+        return;
+      }
 
-      Alert.alert(
-        "Check Your Email 📬",
-        `We sent a verification link to:\n\n${email.trim()}\n\nOpen the link on this device and the app will open automatically. Check your spam folder if you don't see it.`,
-        [{ text: "OK", onPress: () => router.replace("/") }]
-      );
+      // Profile
+
+      router.replace({ pathname: "/verifyEmail", params: { email: email.trim() } });
     } catch (e: any) {
       const msg = e.message || "";
       if (isRateLimitError(msg)) {
@@ -225,17 +213,12 @@ export default function SignUpScreen() {
     }
   };
 
-  // ── Conflict handler: called when identities=[] or Supabase says email taken
+  // Conflict
   const handleEmailAlreadyExists = async (emailAddr: string) => {
-    // A row in weighApp at this point means Google signup (because email/password
-    // accounts no longer insert a row before verification).
-    const { data: profile } = await supabase
-      .from("weighApp")
-      .select("id")
-      .eq("email", emailAddr.toLowerCase())
-      .maybeSingle();
+    // Registration
+    const { data: isRegistered } = await supabase.rpc("email_is_registered", { p_email: emailAddr });
 
-    if (profile) {
+    if (isRegistered === true) {
       Alert.alert(
         "Already Registered with Google 🔑",
         `"${emailAddr}" is linked to a Google account.\n\nPlease tap "Continue with Google" to log in instead.`,
@@ -262,7 +245,7 @@ export default function SignUpScreen() {
     }
   };
 
-  // ─── UI ────────────────────────────────────────────────────────────────────
+  // Layout
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <KeyboardAvoidingView
@@ -275,25 +258,14 @@ export default function SignUpScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={s.title}>WeighApp</Text>
+          <BrandLogo variant="full" width={240} style={s.logo} />
           <Text style={s.subtitle}>Create your account and start your journey</Text>
 
-          <Pressable
-            style={[s.googleBtn, googleLoading && s.btnLoading]}
+          <GoogleButton
             onPress={handleGoogleSignIn}
-            disabled={googleLoading || emailLoading}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color="#065f46" size="small" />
-            ) : (
-              <View style={s.googleInner}>
-                <View style={s.googleIcon}>
-                  <Text style={s.googleG}>G</Text>
-                </View>
-                <Text style={s.googleText}>Continue with Google</Text>
-              </View>
-            )}
-          </Pressable>
+            loading={googleLoading}
+            disabled={emailLoading}
+          />
 
           <View style={s.dividerRow}>
             <View style={s.dividerLine} />
@@ -303,59 +275,60 @@ export default function SignUpScreen() {
 
           {!showEmailForm ? (
             <Pressable
-              style={s.emailToggleBtn}
+              style={({ pressed }) => [s.emailToggleBtn, pressed && s.pressed]}
               onPress={() => setShowEmailForm(true)}
               disabled={googleLoading}
+              accessibilityRole="button"
             >
-              <Text style={s.emailToggleText}>Sign up with Email instead</Text>
+              <Ionicons name="mail-outline" size={20} color={colors.accent} />
+              <Text style={s.emailToggleText}>Sign up with email</Text>
             </Pressable>
           ) : (
             <View style={s.emailForm}>
-              <TextInput
-                style={s.input}
+              <AuthField
+                icon="person-outline"
                 placeholder="Username"
-                placeholderTextColor="#94a3b8"
                 value={username}
                 onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
                 editable={!emailLoading}
               />
-              <TextInput
-                style={s.input}
+              <AuthField
+                icon="mail-outline"
                 placeholder="Email address"
-                placeholderTextColor="#94a3b8"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
                 editable={!emailLoading}
               />
-              <TextInput
-                style={s.input}
+              <AuthField
+                icon="lock-closed-outline"
                 placeholder="Password (min. 6 characters)"
-                placeholderTextColor="#94a3b8"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
+                secure
                 editable={!emailLoading}
               />
 
-              <Text style={s.hint}>
-                💡 Tip: If you see a rate limit error, wait 5–10 minutes and try again.
-              </Text>
+              <View style={s.hintRow}>
+                <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+                <Text style={s.hint}>
+                  If you see a rate limit error, wait 5–10 minutes and try again.
+                </Text>
+              </View>
 
               <Pressable
-                style={[s.emailSignupBtn, emailLoading && s.btnLoading]}
+                style={({ pressed }) => [
+                  s.emailSignupBtn,
+                  (emailLoading || pressed) && s.btnLoading,
+                ]}
                 onPress={handleEmailSignUp}
                 disabled={emailLoading || googleLoading}
+                accessibilityRole="button"
               >
                 {emailLoading ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={colors.onAccent} size="small" />
                 ) : (
-                  <Text style={s.emailSignupText}>CREATE ACCOUNT</Text>
+                  <Text style={s.emailSignupText}>Create account</Text>
                 )}
               </Pressable>
               <Pressable
@@ -368,7 +341,7 @@ export default function SignUpScreen() {
           )}
 
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, "/")}
             style={s.loginWrapper}
             disabled={googleLoading || emailLoading}
           >
@@ -383,130 +356,74 @@ export default function SignUpScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fff9" },
-  scroll: {
-    paddingHorizontal: 32,
-    paddingVertical: 60,
-    alignItems: "center",
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 55,
-    fontWeight: "900",
-    color: "#065f46",
-    letterSpacing: 1,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#059669",
-    textAlign: "center",
-    marginBottom: 50,
-    lineHeight: 26,
-    fontWeight: "500",
-  },
-  googleBtn: {
-    backgroundColor: "#ffffff",
-    width: "100%",
-    paddingVertical: 18,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#86efac",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
-    marginBottom: 24,
-  },
-  googleInner: { flexDirection: "row", alignItems: "center", gap: 12 },
-  googleIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#e2e8f0",
-  },
-  googleG: { fontSize: 16, fontWeight: "900", color: "#4285F4" },
-  googleText: { fontSize: 17, fontWeight: "700", color: "#065f46" },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 20,
-  },
-  dividerLine: { flex: 1, height: 1.5, backgroundColor: "#86efac" },
-  dividerLabel: {
-    marginHorizontal: 12,
-    color: "#059669",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  emailToggleBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#86efac",
-    borderStyle: "dashed",
-    marginBottom: 8,
-  },
-  emailToggleText: {
-    color: "#059669",
-    fontSize: 15,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  emailForm: { width: "100%" },
-  input: {
-    backgroundColor: "#f0fdf4",
-    borderWidth: 2,
-    borderColor: "#86efac",
-    width: "100%",
-    padding: 20,
-    borderRadius: 20,
-    fontSize: 17,
-    color: "#065f46",
-    marginBottom: 18,
-  },
-  hint: {
-    fontSize: 13,
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 14,
-    lineHeight: 18,
-    paddingHorizontal: 4,
-  },
-  emailSignupBtn: {
-    backgroundColor: "#10b981",
-    width: "100%",
-    paddingVertical: 20,
-    borderRadius: 20,
-    alignItems: "center",
-    marginTop: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 12,
-  },
-  emailSignupText: {
-    color: "#ffffff",
-    fontSize: 19,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  hideEmailBtn: { paddingVertical: 12, alignItems: "center", marginTop: 4 },
-  hideEmailText: { color: "#94a3b8", fontSize: 14, fontWeight: "500" },
-  btnLoading: { opacity: 0.6 },
-  loginWrapper: { marginTop: 44 },
-  loginText: { fontSize: 16, color: "#059669", textAlign: "center" },
-  loginBold: { fontWeight: "800", color: "#065f46" },
-});
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    pressed: { opacity: 0.8 },
+    scroll: {
+      paddingHorizontal: 28,
+      paddingVertical: 48,
+      alignItems: "center",
+      flexGrow: 1,
+      justifyContent: "center",
+    },
+    logo: { marginBottom: 6 },
+    subtitle: {
+      fontSize: 15,
+      color: c.textSecondary,
+      textAlign: "center",
+      marginBottom: 32,
+      lineHeight: 22,
+      fontWeight: "500",
+    },
+    dividerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      width: "100%",
+      marginVertical: 22,
+    },
+    dividerLine: { flex: 1, height: 1, backgroundColor: c.border },
+    dividerLabel: {
+      marginHorizontal: 12,
+      color: c.textMuted,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    emailToggleBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      width: "100%",
+      height: 56,
+      borderRadius: 16,
+      borderWidth: 1.5,
+      borderColor: c.accent,
+      backgroundColor: c.surfaceAlt,
+    },
+    emailToggleText: { color: c.accent, fontSize: 16, fontWeight: "800" },
+    emailForm: { width: "100%" },
+    hintRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 16,
+      paddingHorizontal: 2,
+    },
+    hint: { flex: 1, fontSize: 13, color: c.textMuted, lineHeight: 18 },
+    emailSignupBtn: {
+      backgroundColor: c.accent,
+      width: "100%",
+      height: 56,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    emailSignupText: { color: c.onAccent, fontSize: 17, fontWeight: "800", letterSpacing: 0.3 },
+    hideEmailBtn: { paddingVertical: 12, alignItems: "center", marginTop: 6 },
+    hideEmailText: { color: c.textMuted, fontSize: 14, fontWeight: "600" },
+    btnLoading: { opacity: 0.7 },
+    loginWrapper: { marginTop: 24, paddingVertical: 6 },
+    loginText: { fontSize: 15, color: c.textSecondary, textAlign: "center" },
+    loginBold: { fontWeight: "800", color: c.accent },
+  });

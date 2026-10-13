@@ -1,35 +1,61 @@
-// app/reminders.tsx
+// Reminders
 
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
+import { Text, TextInput } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import { supabase } from "../lib/supabase";
+import { getSessionUser } from "../lib/auth/session";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
-const PH_TIMEZONE = "Asia/Manila";
+// Timezone
+const REF_YEAR = 2000;
+const REF_MONTH = 0;
+const REF_DATE = 1;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
-} as any);
+});
+
+// Channel
+const REMINDER_CHANNEL_ID = "reminders";
+
+async function ensureNotificationSetup(): Promise<boolean> {
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
+      name: "Reminders",
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: "default",
+      vibrationPattern: [0, 250, 250, 250],
+    });
+  }
+
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+  if (!current.canAskAgain) return false;
+  const requested = await Notifications.requestPermissionsAsync();
+  return requested.granted;
+}
 
 type Reminder = {
   id: string;
@@ -41,6 +67,8 @@ type Reminder = {
 
 export default function RemindersScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -48,10 +76,11 @@ export default function RemindersScreen() {
   const [name, setName] = useState("");
   const [selectedTime, setSelectedTime] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
-  // FIX: store userId in state so fetchReminders doesn't need router in deps
+  const [nameFocused, setNameFocused] = useState(false);
+  // State
   const [userId, setUserId] = useState<string | null>(null);
 
-  // FIX: useCallback so fetchReminders is stable and can be called from multiple places
+  // Fetching
   const fetchReminders = useCallback(async (uid: string) => {
     try {
       const { data, error } = await supabase
@@ -73,9 +102,19 @@ export default function RemindersScreen() {
 
   useEffect(() => {
     const init = async () => {
-      await Notifications.requestPermissionsAsync();
+      const allowed = await ensureNotificationSetup();
+      if (!allowed) {
+        Alert.alert(
+          "Notifications are off",
+          "Reminders can't alert you until notifications are allowed for WeighApp.",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
+      }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) {
         router.replace("/");
         return;
@@ -85,29 +124,26 @@ export default function RemindersScreen() {
       setLoading(false);
     };
     init();
-  }, [fetchReminders]);
+  }, [fetchReminders, router]);
 
   const saveReminder = async () => {
     if (!name.trim()) return Alert.alert("Error", "Reminder name is required");
     if (!userId) return;
 
-    const phHours = selectedTime.getHours();
-    const phMinutes = selectedTime.getMinutes();
-
-    const todayInPH = toZonedTime(new Date(), PH_TIMEZONE);
-    const utcTime = new Date(Date.UTC(
-      todayInPH.getFullYear(),
-      todayInPH.getMonth(),
-      todayInPH.getDate(),
-      phHours - 8,
-      phMinutes,
+    // Timezone
+    const stored = new Date(Date.UTC(
+      REF_YEAR,
+      REF_MONTH,
+      REF_DATE,
+      selectedTime.getHours(),
+      selectedTime.getMinutes(),
       0
     ));
 
     const payload = {
       user_id: userId,
       name: name.trim(),
-      time: utcTime.toISOString(),
+      time: stored.toISOString(),
       enabled: true,
     };
 
@@ -170,9 +206,10 @@ export default function RemindersScreen() {
     for (const r of reminders) {
       if (!r.enabled) continue;
 
-      const utcTime = new Date(r.time);
-      const trigger = new Date(utcTime.getTime() + 8 * 60 * 60 * 1000);
+      // Timezone
+      const stored = new Date(r.time);
 
+      // Scheduling
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Reminder",
@@ -180,10 +217,11 @@ export default function RemindersScreen() {
           sound: true,
         },
         trigger: {
-          hour: trigger.getHours(),
-          minute: trigger.getMinutes(),
-          repeats: true,
-        } as Notifications.NotificationTriggerInput,
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: stored.getUTCHours(),
+          minute: stored.getUTCMinutes(),
+          channelId: REMINDER_CHANNEL_ID,
+        },
       });
     }
   };
@@ -196,20 +234,27 @@ export default function RemindersScreen() {
 
   const editReminder = (reminder: Reminder) => {
     setName(reminder.name);
-    setSelectedTime(new Date(new Date(reminder.time).getTime() + 8 * 60 * 60 * 1000));
+    const stored = new Date(reminder.time);
+    // Picker
+    const local = new Date();
+    local.setHours(stored.getUTCHours(), stored.getUTCMinutes(), 0, 0);
+    setSelectedTime(local);
     setEditingId(reminder.id);
     setModalVisible(true);
   };
 
-  const formatPHTime = (utcIso: string) => {
-    const utcDate = new Date(utcIso);
-    return format(new Date(utcDate.getTime() + 8 * 60 * 60 * 1000), "h:mm a");
+  const formatReminderTime = (isoString: string) => {
+    const stored = new Date(isoString);
+    return format(
+      new Date(REF_YEAR, REF_MONTH, REF_DATE, stored.getUTCHours(), stored.getUTCMinutes()),
+      "h:mm a"
+    );
   };
 
   if (loading) {
     return (
-      <View style={s.container}>
-        <ActivityIndicator size="large" color="#10b981" />
+      <View style={s.centered}>
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={s.loadingText}>Loading reminders...</Text>
       </View>
     );
@@ -217,57 +262,101 @@ export default function RemindersScreen() {
 
   return (
     <View style={s.container}>
-      <Pressable onPress={() => router.back()} style={s.backBtn}>
-        <Ionicons name="arrow-back" size={32} color="#10b981" />
-      </Pressable>
-
-      <Text style={s.header}>Reminders</Text>
+      <View style={s.headerContainer}>
+        <Text style={s.header}>Reminders</Text>
+      </View>
 
       <FlatList
         data={reminders}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={s.listContent}
+        showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <View style={s.card}>
-            <View>
-              <Text style={s.name}>{item.name}</Text>
-              <Text style={s.time}>{formatPHTime(item.time)}</Text>
+            <View style={s.cardInfo}>
+              <Text style={[s.time, !item.enabled && s.timeOff]}>
+                {formatReminderTime(item.time)}
+              </Text>
+              <Text style={s.name} numberOfLines={2}>{item.name}</Text>
             </View>
             <View style={s.actions}>
-              <Pressable onPress={() => toggleReminder(item.id, !item.enabled)}>
+              <Pressable
+                onPress={() => toggleReminder(item.id, !item.enabled)}
+                style={({ pressed }) => [
+                  s.iconBtn,
+                  item.enabled && s.iconBtnOn,
+                  pressed && s.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={item.enabled ? "Turn reminder off" : "Turn reminder on"}
+              >
                 <Ionicons
                   name={item.enabled ? "notifications" : "notifications-off"}
-                  size={26}
-                  color={item.enabled ? "#10b981" : "#94a3b8"}
+                  size={22}
+                  color={item.enabled ? colors.onAccent : colors.textMuted}
                 />
               </Pressable>
-              <Pressable onPress={() => editReminder(item)} style={{ marginLeft: 20 }}>
-                <Ionicons name="pencil" size={24} color="#fbbf24" />
+              <Pressable
+                onPress={() => editReminder(item)}
+                style={({ pressed }) => [s.iconBtn, pressed && s.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Edit reminder"
+              >
+                <Ionicons name="pencil" size={20} color="#f59e0b" />
               </Pressable>
-              <Pressable onPress={() => deleteReminder(item.id)} style={{ marginLeft: 20 }}>
-                <Ionicons name="trash" size={24} color="#f87171" />
+              <Pressable
+                onPress={() => deleteReminder(item.id)}
+                style={({ pressed }) => [s.iconBtn, pressed && s.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Delete reminder"
+              >
+                <Ionicons name="trash" size={20} color="#ef4444" />
               </Pressable>
             </View>
           </View>
         )}
-        ListEmptyComponent={<Text style={s.empty}>No reminders yet</Text>}
+        ListEmptyComponent={
+          <View style={s.emptyCard}>
+            <View style={s.emptyIcon}>
+              <Ionicons name="alarm-outline" size={34} color={colors.accent} />
+            </View>
+            <Text style={s.emptyTitle}>No reminders yet</Text>
+            <Text style={s.emptyText}>
+              Tap the + button to add your first daily reminder.
+            </Text>
+          </View>
+        }
       />
 
-      <Pressable style={s.addBtn} onPress={() => { resetForm(); setModalVisible(true); }}>
-        <Ionicons name="add" size={36} color="#fff" />
+      <Pressable
+        style={({ pressed }) => [s.addBtn, pressed && s.pressed]}
+        onPress={() => { resetForm(); setModalVisible(true); }}
+        accessibilityRole="button"
+        accessibilityLabel="Add reminder"
+      >
+        <Ionicons name="add" size={34} color={colors.onAccent} />
       </Pressable>
 
       <Modal visible={modalVisible} transparent animationType="fade">
-        <View style={s.overlay}>
+        <KeyboardSafeView style={s.overlay}>
           <View style={s.modal}>
             <Text style={s.modalTitle}>{editingId ? "Edit" : "New"} Reminder</Text>
+            <Text style={s.fieldLabel}>Name</Text>
             <TextInput
-              style={s.input}
+              style={[s.input, nameFocused && s.inputFocused]}
               placeholder="Reminder name (e.g., Take meds)"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.textMuted}
               value={name}
               onChangeText={setName}
+              onFocus={() => setNameFocused(true)}
+              onBlur={() => setNameFocused(false)}
             />
-            <Pressable style={s.timeBtn} onPress={() => setShowPicker(true)}>
+            <Text style={s.fieldLabel}>Time</Text>
+            <Pressable
+              style={({ pressed }) => [s.timeBtn, pressed && s.pressed]}
+              onPress={() => setShowPicker(true)}
+            >
+              <Ionicons name="time-outline" size={24} color={colors.accent} />
               <Text style={s.timeTxt}>{format(selectedTime, "h:mm a")}</Text>
             </Pressable>
             {showPicker && (
@@ -282,87 +371,215 @@ export default function RemindersScreen() {
               />
             )}
             <View style={s.btnRow}>
-              <Pressable style={s.cancel} onPress={() => setModalVisible(false)}>
+              <Pressable
+                style={({ pressed }) => [s.cancel, pressed && s.pressed]}
+                onPress={() => setModalVisible(false)}
+              >
                 <Text style={s.btnTxt}>Cancel</Text>
               </Pressable>
-              <Pressable style={s.save} onPress={saveReminder}>
+              <Pressable
+                style={({ pressed }) => [s.save, pressed && s.pressed]}
+                onPress={saveReminder}
+              >
                 <Text style={s.saveTxt}>Save</Text>
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardSafeView>
       </Modal>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fff9", paddingTop: 60 },
-  backBtn: {
-    position: "absolute", top: 60, left: 20, zIndex: 10,
-    width: 48, height: 48, borderRadius: 24, backgroundColor: "#fff",
-    justifyContent: "center", alignItems: "center",
-    shadowColor: "#10b981", shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 10,
-  },
-  header: {
-    fontSize: 34, fontWeight: "900", color: "#065f46",
-    textAlign: "center", marginBottom: 30,
-  },
-  card: {
-    backgroundColor: "#fff", marginHorizontal: 20, marginVertical: 8,
-    padding: 20, borderRadius: 24,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    shadowColor: "#10b981", shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16, shadowRadius: 20, elevation: 12,
-    borderWidth: 1.5, borderColor: "#ecfdf5",
-  },
-  name: { fontSize: 19, fontWeight: "700", color: "#065f46" },
-  time: { fontSize: 16, color: "#10b981", marginTop: 4, fontWeight: "600" },
-  actions: { flexDirection: "row", alignItems: "center" },
-  empty: {
-    textAlign: "center", color: "#94a3b8",
-    fontSize: 18, marginTop: 100, fontStyle: "italic",
-  },
-  loadingText: { marginTop: 20, fontSize: 18, color: "#059669", fontWeight: "600" },
-  addBtn: {
-    position: "absolute", bottom: 40, alignSelf: "center",
-    backgroundColor: "#10b981", width: 70, height: 70, borderRadius: 35,
-    justifyContent: "center", alignItems: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3, shadowRadius: 20, elevation: 20,
-  },
-  overlay: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center", alignItems: "center",
-  },
-  modal: {
-    width: "90%", backgroundColor: "#fff", borderRadius: 28, padding: 28,
-    shadowColor: "#10b981", shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22, shadowRadius: 28, elevation: 20,
-  },
-  modalTitle: {
-    fontSize: 26, fontWeight: "800", color: "#065f46",
-    textAlign: "center", marginBottom: 24,
-  },
-  input: {
-    backgroundColor: "#f0fdf4", borderWidth: 2, borderColor: "#86efac",
-    borderRadius: 20, padding: 18, fontSize: 17, color: "#065f46", marginBottom: 20,
-  },
-  timeBtn: {
-    backgroundColor: "#f0fdf4", borderWidth: 2, borderColor: "#86efac",
-    borderRadius: 20, padding: 20, alignItems: "center", marginBottom: 20,
-  },
-  timeTxt: { fontSize: 28, fontWeight: "700", color: "#065f46" },
-  btnRow: { flexDirection: "row", gap: 16 },
-  cancel: {
-    flex: 1, backgroundColor: "#e5e7eb", paddingVertical: 16,
-    borderRadius: 20, alignItems: "center",
-  },
-  save: {
-    flex: 1, backgroundColor: "#10b981", paddingVertical: 16,
-    borderRadius: 20, alignItems: "center",
-  },
-  btnTxt: { fontSize: 18, fontWeight: "700", color: "#374151" },
-  saveTxt: { fontSize: 18, fontWeight: "800", color: "#fff" },
-});
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    centered: {
+      flex: 1,
+      backgroundColor: c.background,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    pressed: { opacity: 0.7 },
+
+    headerContainer: {
+      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingBottom: 16,
+      paddingHorizontal: 20,
+      backgroundColor: c.background,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    backBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.surface,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    header: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.textPrimary,
+    },
+    headerSpacer: { width: 44 },
+
+    listContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 140 },
+
+    card: {
+      backgroundColor: c.surface,
+      marginBottom: 12,
+      paddingVertical: 16,
+      paddingLeft: 20,
+      paddingRight: 12,
+      borderRadius: 22,
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    cardInfo: { flex: 1, paddingRight: 8 },
+    time: { fontSize: 28, fontWeight: "800", color: c.accent },
+    timeOff: { color: c.textMuted },
+    name: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: c.textSecondary,
+      marginTop: 2,
+    },
+    actions: { flexDirection: "row", alignItems: "center", gap: 6 },
+    iconBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: c.surfaceAlt,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    iconBtnOn: { backgroundColor: c.accent },
+
+    emptyCard: {
+      alignItems: "center",
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      padding: 32,
+      marginTop: 24,
+      gap: 8,
+    },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: c.surfaceAlt,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    emptyTitle: { fontSize: 18, fontWeight: "800", color: c.textPrimary },
+    emptyText: {
+      fontSize: 14.5,
+      lineHeight: 21,
+      color: c.textSecondary,
+      textAlign: "center",
+    },
+
+    loadingText: {
+      marginTop: 20,
+      fontSize: 18,
+      color: c.textSecondary,
+      fontWeight: "600",
+    },
+    addBtn: {
+      position: "absolute",
+      bottom: 40,
+      alignSelf: "center",
+      backgroundColor: c.accent,
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      justifyContent: "center",
+      alignItems: "center",
+      borderWidth: 1.5,
+      borderColor: c.accentDark,
+    },
+
+    overlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    modal: {
+      width: "90%",
+      maxWidth: 420,
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      padding: 24,
+    },
+    modalTitle: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.textPrimary,
+      textAlign: "center",
+      marginBottom: 20,
+    },
+    fieldLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.textSecondary,
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: c.background,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      height: 52,
+      fontSize: 16,
+      color: c.textPrimary,
+      marginBottom: 18,
+    },
+    inputFocused: { borderColor: c.accent },
+    timeBtn: {
+      flexDirection: "row",
+      gap: 10,
+      backgroundColor: c.background,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      borderRadius: 14,
+      height: 60,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+    timeTxt: { fontSize: 26, fontWeight: "800", color: c.textPrimary },
+    btnRow: { flexDirection: "row", gap: 12, marginTop: 4 },
+    cancel: {
+      flex: 1,
+      backgroundColor: c.surfaceAlt,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      paddingVertical: 14,
+      borderRadius: 16,
+      alignItems: "center",
+    },
+    save: {
+      flex: 1,
+      backgroundColor: c.accent,
+      paddingVertical: 14,
+      borderRadius: 16,
+      alignItems: "center",
+    },
+    btnTxt: { fontSize: 17, fontWeight: "800", color: c.textPrimary },
+    saveTxt: { fontSize: 17, fontWeight: "800", color: c.onAccent },
+  });

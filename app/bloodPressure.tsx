@@ -1,8 +1,8 @@
-// app/bloodPressure.tsx — With BP remarks and suggestions after logging
+// Pressure
 import { Ionicons } from "@expo/vector-icons";
 import { format } from "date-fns";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,20 +12,15 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { Text, TextInput } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+import { getSessionUser } from "../lib/auth/session";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
 type BPEntry = {
   id: string;
@@ -44,7 +39,7 @@ type BPRemark = {
   suggestion: string;
 };
 
-// Returns BP category, color, and suggestion based on systolic/diastolic values
+// Remarks
 function getBPRemark(systolic: number, diastolic: number): BPRemark {
   if (systolic < 90 || diastolic < 60) {
     return {
@@ -91,13 +86,10 @@ function getBPRemark(systolic: number, diastolic: number): BPRemark {
   }
 }
 
-// Returns the BP badge color for history list items
-function getBPColor(systolic: number, diastolic: number): string {
-  return getBPRemark(systolic, diastolic).color;
-}
-
 export default function BloodPressureScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
@@ -113,23 +105,12 @@ export default function BloodPressureScreen() {
   const [currentRemark, setCurrentRemark] = useState<BPRemark | null>(null);
   const [loggedSystolic, setLoggedSystolic] = useState(0);
   const [loggedDiastolic, setLoggedDiastolic] = useState(0);
+  const [focused, setFocused] = useState<string | null>(null);
 
-  // Animation values
-  const backScale = useSharedValue(1);
-  const logScale = useSharedValue(1);
-
-  const animatedBackStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: backScale.value }],
-  }));
-
-  const animatedLogStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: logScale.value }],
-  }));
-
-  // Fetch current authenticated user
+  // Auth
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) {
         Alert.alert("Not Authenticated", "Please log in to use this feature.");
         router.replace("/");
@@ -140,7 +121,7 @@ export default function BloodPressureScreen() {
     getUser();
   }, []);
 
-  // Fetch history only when user is confirmed
+  // History
   const fetchHistory = async () => {
     if (!currentUserId) return;
 
@@ -161,7 +142,7 @@ export default function BloodPressureScreen() {
     }
   };
 
-  // Re-fetch when user is loaded
+  // Refresh
   useEffect(() => {
     if (currentUserId) {
       fetchHistory();
@@ -200,7 +181,7 @@ export default function BloodPressureScreen() {
 
       if (error) throw error;
 
-      // Reset form
+      // Reset
       setSystolic("");
       setDiastolic("");
       setPulse("");
@@ -209,7 +190,7 @@ export default function BloodPressureScreen() {
 
       fetchHistory();
 
-      // Show remark modal
+      // Remarks
       const remark = getBPRemark(s, d);
       setLoggedSystolic(s);
       setLoggedDiastolic(d);
@@ -274,42 +255,55 @@ export default function BloodPressureScreen() {
     );
   };
 
+
   const renderItem = ({ item }: { item: BPEntry }) => {
     const remark = getBPRemark(item.systolic, item.diastolic);
     return (
       <View style={[s.historyItem, { borderLeftColor: remark.color }]}>
         <View style={s.historyHeader}>
-          <Text style={s.date}>
-            {format(new Date(item.created_at), "MMM d, yyyy h:mm a")}
-          </Text>
-          <Pressable style={s.deleteButton} onPress={() => deleteEntry(item.id)}>
-            <Ionicons name="close-circle-outline" size={24} color="#f87171" />
+          <View style={s.dateWrap}>
+            <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+            <Text style={s.date}>
+              {format(new Date(item.created_at), "MMM d, yyyy h:mm a")}
+            </Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [s.deleteButton, pressed && s.pressed]}
+            onPress={() => deleteEntry(item.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Delete reading"
+          >
+            <Ionicons name="trash-outline" size={20} color="#f87171" />
           </Pressable>
         </View>
 
-        <View style={s.readings}>
-          <Text style={s.readingText}>
-            <Text style={s.readingLabel}>Systolic:</Text> {item.systolic} mmHg
-          </Text>
-          <Text style={s.readingText}>
-            <Text style={s.readingLabel}>Diastolic:</Text> {item.diastolic} mmHg
-          </Text>
+        <View style={s.readingRow}>
+          <View style={s.readingMain}>
+            <Text style={s.readingValue}>
+              {item.systolic}/{item.diastolic}
+            </Text>
+            <Text style={s.readingUnit}>mmHg</Text>
+          </View>
+          {item.pulse != null && (
+            <View style={s.pulseChip}>
+              <Ionicons name="pulse-outline" size={16} color={colors.accent} />
+              <Text style={s.pulseText}>{item.pulse} bpm</Text>
+            </View>
+          )}
         </View>
 
-        {item.pulse != null && (
-          <Text style={s.pulse}>Pulse: {item.pulse} bpm</Text>
-        )}
-
-        {/* Remark badge on history card */}
+        {/* Badge */}
         <View style={[s.remarkBadge, { backgroundColor: remark.color + "22", borderColor: remark.color }]}>
           <Text style={[s.remarkBadgeText, { color: remark.color }]}>{remark.category}</Text>
         </View>
 
         <Pressable
           onPress={() => openNoteModal(item.id, item.note || "")}
-          style={s.noteButton}
+          style={({ pressed }) => [s.noteButton, pressed && s.pressed]}
         >
-          <Text style={s.noteText}>
+          <Ionicons name="create-outline" size={16} color={colors.textMuted} />
+          <Text style={[s.noteText, !item.note && s.noteTextEmpty]} numberOfLines={3}>
             {item.note ? `Note: ${item.note}` : "Tap to add/edit note..."}
           </Text>
         </Pressable>
@@ -321,104 +315,146 @@ export default function BloodPressureScreen() {
     return (
       <SafeAreaView style={s.safeArea}>
         <View style={s.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
-          <Text style={{ marginTop: 16, color: "#065f46" }}>Loading user...</Text>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={s.loadingText}>Loading user...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const latest = history.length > 0 ? history[0] : null;
+  const latestRemark = latest ? getBPRemark(latest.systolic, latest.diastolic) : null;
+
+  const listHeader = (
+    <View>
+      {/* Input */}
+      <View style={s.inputCard}>
+        <Text style={s.inputTitle}>Log New Reading</Text>
+
+        <View style={s.inputRow}>
+          <View style={s.inputWrapper}>
+            <Text style={s.inputLabel}>Systolic</Text>
+            <TextInput
+              style={[s.input, focused === "systolic" && s.inputFocused]}
+              value={systolic}
+              onChangeText={setSystolic}
+              onFocus={() => setFocused("systolic")}
+              onBlur={() => setFocused(null)}
+              placeholder="120"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+            />
+            <Text style={s.inputUnit}>mmHg</Text>
+          </View>
+
+          <View style={s.inputWrapper}>
+            <Text style={s.inputLabel}>Diastolic</Text>
+            <TextInput
+              style={[s.input, focused === "diastolic" && s.inputFocused]}
+              value={diastolic}
+              onChangeText={setDiastolic}
+              onFocus={() => setFocused("diastolic")}
+              onBlur={() => setFocused(null)}
+              placeholder="80"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+            />
+            <Text style={s.inputUnit}>mmHg</Text>
+          </View>
+
+          <View style={s.inputWrapper}>
+            <Text style={s.inputLabel}>Pulse</Text>
+            <TextInput
+              style={[s.input, focused === "pulse" && s.inputFocused]}
+              value={pulse}
+              onChangeText={setPulse}
+              onFocus={() => setFocused("pulse")}
+              onBlur={() => setFocused(null)}
+              placeholder="75"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+            />
+            <Text style={s.inputUnit}>bpm (optional)</Text>
+          </View>
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [s.logButton, pressed && s.pressed]}
+          onPress={logEntry}
+          accessibilityRole="button"
+        >
+          <Ionicons name="heart" size={18} color={colors.onAccent} />
+          <Text style={s.logButtonText}>Log Reading</Text>
+        </Pressable>
+      </View>
+
+      {/* Status */}
+      {latest && latestRemark && (
+        <View style={s.statusCard}>
+          <Text style={s.statusLabel}>Latest reading</Text>
+          <View style={s.statusRow}>
+            <Text style={s.statusValue}>
+              {latest.systolic}/{latest.diastolic}
+              <Text style={s.statusUnit}> mmHg</Text>
+            </Text>
+            <View
+              style={[
+                s.statusChip,
+                { backgroundColor: latestRemark.color + "22", borderColor: latestRemark.color },
+              ]}
+            >
+              <View style={[s.statusDot, { backgroundColor: latestRemark.color }]} />
+              <Text style={[s.statusChipText, { color: latestRemark.color }]} numberOfLines={2}>
+                {latestRemark.category}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      <Text style={s.historyTitle}>Recent Readings</Text>
+      {loading && (
+        <View style={s.listLoading}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
       {/* Header */}
       <View style={s.headerContainer}>
-        <AnimatedPressable
-          style={[s.backButton, animatedBackStyle]}
-          onPressIn={() => (backScale.value = withSpring(0.92))}
-          onPressOut={() => (backScale.value = withSpring(1))}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={32} color="#10b981" />
-        </AnimatedPressable>
         <Text style={s.header}>Blood Pressure Log</Text>
-        <View style={{ width: 48 }} />
       </View>
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={s.container}>
-          {/* Input Card */}
-          <View style={s.inputCard}>
-            <Text style={s.inputTitle}>Log New Reading</Text>
-
-            <View style={s.inputRow}>
-              <View style={s.inputWrapper}>
-                <Text style={s.inputLabel}>Systolic</Text>
-                <TextInput
-                  style={s.input}
-                  value={systolic}
-                  onChangeText={setSystolic}
-                  placeholder="e.g. 120"
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View style={s.inputWrapper}>
-                <Text style={s.inputLabel}>Diastolic</Text>
-                <TextInput
-                  style={s.input}
-                  value={diastolic}
-                  onChangeText={setDiastolic}
-                  placeholder="e.g. 80"
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-
-            <View style={s.inputWrapperFull}>
-              <Text style={s.inputLabel}>Pulse (optional)</Text>
-              <TextInput
-                style={s.input}
-                value={pulse}
-                onChangeText={setPulse}
-                placeholder="e.g. 75"
-                placeholderTextColor="#94a3b8"
-                keyboardType="numeric"
-              />
-            </View>
-
-            <AnimatedPressable
-              style={[s.logButton, animatedLogStyle]}
-              onPressIn={() => (logScale.value = withSpring(0.95))}
-              onPressOut={() => (logScale.value = withSpring(1))}
-              onPress={logEntry}
-            >
-              <Text style={s.logButtonText}>Log Reading</Text>
-            </AnimatedPressable>
-          </View>
-
-          {/* History */}
-          <Text style={s.historyTitle}>Recent Readings</Text>
-          {loading ? (
-            <View style={s.loadingContainer}>
-              <ActivityIndicator size="large" color="#10b981" />
-            </View>
-          ) : (
-            <FlatList
-              data={history}
-              renderItem={renderItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={s.listContent}
-              ListEmptyComponent={() => (
+      <KeyboardSafeView
+        style={s.flex}
+        behavior="padding"
+      >
+        <FlatList
+          data={loading ? [] : history}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={s.listContent}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            loading ? null : (
+              <View style={s.emptyWrap}>
+                <View style={s.emptyIcon}>
+                  <Ionicons name="heart-outline" size={32} color={colors.accent} />
+                </View>
                 <Text style={s.emptyText}>No blood pressure readings logged yet.</Text>
-              )}
-            />
-          )}
-        </View>
-      </TouchableWithoutFeedback>
+              </View>
+            )
+          }
+        />
+      </KeyboardSafeView>
 
-      {/* Note Modal */}
+      {/* Notes */}
       <Modal
         visible={showNoteModal}
         transparent={true}
@@ -431,23 +467,28 @@ export default function BloodPressureScreen() {
               <View style={s.noteModal}>
                 <Text style={s.modalTitle}>Edit Note</Text>
                 <TextInput
-                  style={[s.input, s.modalInput]}
+                  style={[s.input, s.modalInput, focused === "note" && s.inputFocused]}
                   value={currentNote}
                   onChangeText={setCurrentNote}
+                  onFocus={() => setFocused("note")}
+                  onBlur={() => setFocused(null)}
                   placeholder="Enter your note here"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={colors.textMuted}
                   autoFocus
                   multiline
                 />
                 <View style={s.modalButtons}>
                   <Pressable
-                    style={[s.actionButton, s.cancelButton]}
+                    style={({ pressed }) => [s.actionButton, s.cancelButton, pressed && s.pressed]}
                     onPress={() => setShowNoteModal(false)}
                   >
                     <Text style={[s.actionText, { color: "#f87171" }]}>Cancel</Text>
                   </Pressable>
-                  <Pressable style={[s.actionButton, s.saveButton]} onPress={saveNote}>
-                    <Text style={[s.actionText, { color: "#ffffff" }]}>Save</Text>
+                  <Pressable
+                    style={({ pressed }) => [s.actionButton, s.saveButton, pressed && s.pressed]}
+                    onPress={saveNote}
+                  >
+                    <Text style={[s.actionText, { color: colors.onAccent }]}>Save</Text>
                   </Pressable>
                 </View>
               </View>
@@ -456,7 +497,7 @@ export default function BloodPressureScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* BP Remark Modal */}
+      {/* Remarks */}
       <Modal
         visible={remarkVisible}
         transparent={true}
@@ -465,14 +506,14 @@ export default function BloodPressureScreen() {
       >
         <View style={s.modalOverlay}>
           <View style={s.remarkModal}>
-            <Ionicons name="heart" size={48} color={currentRemark?.color ?? "#10b981"} style={{ marginBottom: 12 }} />
+            <Ionicons name="heart" size={48} color={currentRemark?.color ?? colors.accent} style={{ marginBottom: 12 }} />
             <Text style={s.remarkModalTitle}>Reading Logged!</Text>
             <Text style={s.remarkReading}>
               {loggedSystolic}/{loggedDiastolic} mmHg
             </Text>
 
-            <View style={[s.remarkBadge, { backgroundColor: (currentRemark?.color ?? "#10b981") + "22", borderColor: currentRemark?.color ?? "#10b981", marginBottom: 16, alignSelf: "center" }]}>
-              <Text style={[s.remarkBadgeText, { color: currentRemark?.color ?? "#10b981" }]}>
+            <View style={[s.remarkBadge, { backgroundColor: (currentRemark?.color ?? colors.accent) + "22", borderColor: currentRemark?.color ?? colors.accent, marginBottom: 16, alignSelf: "center" }]}>
+              <Text style={[s.remarkBadgeText, { color: currentRemark?.color ?? colors.accent }]}>
                 {currentRemark?.category}
               </Text>
             </View>
@@ -481,10 +522,10 @@ export default function BloodPressureScreen() {
             <Text style={s.suggestionText}>{currentRemark?.suggestion}</Text>
 
             <Pressable
-              style={[s.actionButton, s.saveButton, { marginTop: 24, alignSelf: "stretch" }]}
+              style={({ pressed }) => [s.actionButton, s.saveButton, { marginTop: 24, alignSelf: "stretch" }, pressed && s.pressed]}
               onPress={() => setRemarkVisible(false)}
             >
-              <Text style={[s.actionText, { color: "#fff" }]}>Got it!</Text>
+              <Text style={[s.actionText, { color: colors.onAccent }]}>Got it!</Text>
             </Pressable>
           </View>
         </View>
@@ -493,169 +534,198 @@ export default function BloodPressureScreen() {
   );
 }
 
-// STYLES
-const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f8fff9" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  headerContainer: {
-    paddingTop: Platform.OS === "android" ? 50 : 20,
-    paddingBottom: 30,
-    paddingHorizontal: 24,
-    backgroundColor: "#f8fff9",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
-    marginRight: 16,
-  },
-  header: {
-    fontSize: 23,
-    fontWeight: "900",
-    color: "#064e3b",
-    flex: 1,
-    textAlign: "center",
-    letterSpacing: 0.6,
-  },
-  container: { flex: 1, paddingHorizontal: 20, backgroundColor: "#f8fff9" },
-  inputCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 28,
-    padding: 30,
-    marginBottom: 24,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22,
-    shadowRadius: 30,
-    elevation: 20,
-    borderWidth: 2,
-    borderColor: "#d1fae5",
-  },
-  inputTitle: { fontSize: 24, fontWeight: "800", color: "#065f46", textAlign: "center", marginBottom: 24 },
-  inputRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  inputWrapper: { flex: 1, marginRight: 12 },
-  inputWrapperFull: { marginBottom: 16 },
-  inputLabel: { color: "#059669", fontSize: 16, fontWeight: "700", marginBottom: 8 },
-  input: {
-    backgroundColor: "#f0fdf4",
-    borderWidth: 2.5,
-    borderColor: "#86efac",
-    color: "#065f46",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 14,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  logButton: {
-    backgroundColor: "#10b981",
-    paddingVertical: 18,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 20,
-    shadowColor: "#059669",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  logButtonText: { color: "#ffffff", fontWeight: "800", fontSize: 19, letterSpacing: 0.5 },
-  historyTitle: { fontSize: 22, fontWeight: "800", color: "#065f46", marginBottom: 16, marginLeft: 4 },
-  listContent: { paddingBottom: 100 },
-  historyItem: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderLeftWidth: 6,
-    borderLeftColor: "#34d399",
-  },
-  historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  date: { color: "#059669", fontSize: 15, fontWeight: "700" },
-  deleteButton: { padding: 4 },
-  readings: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ecfdf5",
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  readingText: { color: "#065f46", fontSize: 18, fontWeight: "800" },
-  readingLabel: { color: "#10b981", fontWeight: "600", fontSize: 15 },
-  pulse: { color: "#10b981", marginTop: 8, fontWeight: "700" },
-  remarkBadge: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    alignSelf: "flex-start",
-    marginTop: 8,
-  },
-  remarkBadgeText: { fontSize: 13, fontWeight: "700" },
-  noteButton: { marginTop: 10, paddingVertical: 4 },
-  noteText: { color: "#065f46", fontStyle: "italic", fontWeight: "500" },
-  emptyText: { textAlign: "center", color: "#94a3b8", fontSize: 17, marginTop: 60, fontWeight: "500" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  noteModal: {
-    backgroundColor: "#ffffff",
-    width: "88%",
-    borderRadius: 24,
-    padding: 28,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 25,
-    elevation: 15,
-    borderWidth: 1,
-    borderColor: "#ecfdf5",
-  },
-  remarkModal: {
-    backgroundColor: "#ffffff",
-    width: "90%",
-    borderRadius: 28,
-    padding: 28,
-    alignItems: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22,
-    shadowRadius: 28,
-    elevation: 20,
-  },
-  remarkModalTitle: { fontSize: 26, fontWeight: "800", color: "#065f46", marginBottom: 8 },
-  remarkReading: { fontSize: 36, fontWeight: "900", color: "#065f46", marginBottom: 16 },
-  suggestionTitle: { fontSize: 18, fontWeight: "800", color: "#059669", alignSelf: "flex-start", marginBottom: 8 },
-  suggestionText: { fontSize: 15, fontWeight: "500", color: "#374151", lineHeight: 22, textAlign: "left" },
-  modalTitle: { fontSize: 22, fontWeight: "800", color: "#065f46", marginBottom: 20, textAlign: "center" },
-  modalInput: { marginBottom: 24, minHeight: 100, textAlignVertical: "top" },
-  modalButtons: { flexDirection: "row", justifyContent: "space-between", gap: 16 },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  cancelButton: { backgroundColor: "#fef2f2", borderWidth: 1.5, borderColor: "#f87171" },
-  saveButton: { backgroundColor: "#10b981" },
-  actionText: { fontWeight: "700", fontSize: 16 },
-});
+// Styles
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: c.background },
+    flex: { flex: 1 },
+    pressed: { opacity: 0.7 },
+    loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+    loadingText: { marginTop: 16, color: c.textPrimary },
+    listLoading: { paddingVertical: 32, alignItems: "center", justifyContent: "center" },
+
+    headerContainer: {
+      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingBottom: 16,
+      paddingHorizontal: 20,
+      backgroundColor: c.background,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    backButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.surface,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    header: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.textPrimary,
+    },
+    headerSpacer: { width: 44 },
+
+    listContent: { paddingHorizontal: 20, paddingBottom: 60 },
+
+    inputCard: {
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      padding: 18,
+      marginBottom: 16,
+    },
+    inputTitle: { fontSize: 18, fontWeight: "800", color: c.textPrimary, marginBottom: 16 },
+    inputRow: { flexDirection: "row", gap: 10 },
+    inputWrapper: { flex: 1 },
+    inputLabel: { color: c.textPrimary, fontSize: 14, fontWeight: "800", marginBottom: 8, textAlign: "center" },
+    inputUnit: { color: c.textMuted, fontSize: 12, fontWeight: "600", marginTop: 6, textAlign: "center" },
+    input: {
+      backgroundColor: c.background,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      color: c.textPrimary,
+      paddingHorizontal: 8,
+      paddingVertical: 12,
+      borderRadius: 14,
+      fontSize: 20,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    inputFocused: { borderColor: c.accent },
+    logButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      backgroundColor: c.accent,
+      paddingVertical: 16,
+      borderRadius: 16,
+      marginTop: 20,
+    },
+    logButtonText: { color: c.onAccent, fontWeight: "800", fontSize: 17 },
+
+    statusCard: {
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      padding: 18,
+      marginBottom: 20,
+    },
+    statusLabel: { fontSize: 13, fontWeight: "700", color: c.textSecondary, marginBottom: 8 },
+    statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+    statusValue: { fontSize: 30, fontWeight: "800", color: c.textPrimary },
+    statusUnit: { fontSize: 14, fontWeight: "600", color: c.textMuted },
+    statusChip: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1.5,
+      borderRadius: 14,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+    statusDot: { width: 10, height: 10, borderRadius: 5 },
+    statusChipText: { flex: 1, fontSize: 13, fontWeight: "800" },
+
+    historyTitle: { fontSize: 18, fontWeight: "800", color: c.textPrimary, marginBottom: 12, marginLeft: 4 },
+
+    historyItem: {
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      borderLeftWidth: 6,
+    },
+    historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+    dateWrap: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+    date: { color: c.textSecondary, fontSize: 13, fontWeight: "700", flexShrink: 1 },
+    deleteButton: { padding: 4 },
+    readingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+    readingMain: { flexDirection: "row", alignItems: "baseline", gap: 6 },
+    readingValue: { color: c.textPrimary, fontSize: 28, fontWeight: "800" },
+    readingUnit: { color: c.textMuted, fontSize: 13, fontWeight: "600" },
+    pulseChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: c.surfaceAlt,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      borderRadius: 999,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+    },
+    pulseText: { color: c.textPrimary, fontSize: 13, fontWeight: "700" },
+    remarkBadge: {
+      borderWidth: 1.5,
+      borderRadius: 12,
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      alignSelf: "flex-start",
+      marginTop: 10,
+    },
+    remarkBadgeText: { fontSize: 13, fontWeight: "700" },
+    noteButton: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, paddingVertical: 4 },
+    noteText: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: "500" },
+    noteTextEmpty: { color: c.textMuted, fontStyle: "italic" },
+
+    emptyWrap: { alignItems: "center", paddingVertical: 40, paddingHorizontal: 24 },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: c.surface,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 14,
+    },
+    emptyText: { textAlign: "center", color: c.textSecondary, fontSize: 15, fontWeight: "600" },
+
+    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+    noteModal: {
+      backgroundColor: c.surface,
+      width: "88%",
+      borderRadius: 22,
+      padding: 22,
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    remarkModal: {
+      backgroundColor: c.surface,
+      width: "90%",
+      borderRadius: 22,
+      padding: 24,
+      alignItems: "center",
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    remarkModalTitle: { fontSize: 24, fontWeight: "800", color: c.textPrimary, marginBottom: 8 },
+    remarkReading: { fontSize: 34, fontWeight: "800", color: c.textPrimary, marginBottom: 16 },
+    suggestionTitle: { fontSize: 16, fontWeight: "800", color: c.textSecondary, alignSelf: "flex-start", marginBottom: 8 },
+    suggestionText: { fontSize: 15, fontWeight: "500", color: c.textPrimary, lineHeight: 22, textAlign: "left" },
+    modalTitle: { fontSize: 20, fontWeight: "800", color: c.textPrimary, marginBottom: 16, textAlign: "center" },
+    modalInput: { marginBottom: 20, minHeight: 100, textAlignVertical: "top", textAlign: "left", fontSize: 16, fontWeight: "500", paddingHorizontal: 14 },
+    modalButtons: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+    actionButton: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 16,
+      alignItems: "center",
+    },
+    cancelButton: { backgroundColor: "transparent", borderWidth: 1.5, borderColor: "#f87171" },
+    saveButton: { backgroundColor: c.accent },
+    actionText: { fontWeight: "800", fontSize: 16 },
+  });

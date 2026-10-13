@@ -1,0 +1,5 @@
+project_id = "xeknofdruiseeaiibeep"
+
+# Gateway
+[functions.delete-user]
+verify_jwt = true

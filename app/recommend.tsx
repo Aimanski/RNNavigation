@@ -1,55 +1,44 @@
-// app/recommend.tsx — FINAL PREMIUM VERSION + BMI-BASED RECOMMENDATION
+// Recommendation
 
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  BackHandler,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  useWindowDimensions,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { Text } from "../components/ui/AppText";
 import { SafeAreaView } from "react-native-safe-area-context";
+import StepProgress from "../components/ui/StepProgress";
 import { supabase } from "../lib/supabase";
+import { getSessionUser } from "../lib/auth/session";
+import { resetTo } from "../lib/navigation";
+import { Colors, useTheme } from "../providers/ThemeProvider";
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+type IconName = keyof typeof Ionicons.glyphMap;
+type GoalKey = "lose" | "maintain" | "gain";
 
 export default function RecommendScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [tdee, setTdee] = useState(0);
   const [bmi, setBmi] = useState<number | null>(null);
-  const [selected, setSelected] = useState<"lose" | "maintain" | "gain">("maintain");
+  const [selected, setSelected] = useState<GoalKey>("maintain");
   const [loading, setLoading] = useState(true);
 
-  const ctaScale = useSharedValue(1);
-  const animatedCtaStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: ctaScale.value }],
-  }));
-
-  // Block hardware back button
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
-    return () => sub.remove();
-  }, []);
-
-  // Load TDEE + BMI
+  // Loading
   useEffect(() => {
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return router.replace("/Index");
+        const user = await getSessionUser();
+        if (!user) return router.replace("/");
 
         const { data, error } = await supabase
           .from("weighApp")
@@ -68,7 +57,7 @@ export default function RecommendScreen() {
         setTdee(data.tdee);
         setBmi(data.bmi || null);
 
-        // Auto-select recommended goal based on BMI
+        // Selection
         if (data.bmi) {
           if (data.bmi < 18.5) setSelected("gain");
           else if (data.bmi >= 18.5 && data.bmi <= 24.9) setSelected("maintain");
@@ -86,7 +75,7 @@ export default function RecommendScreen() {
   const saveAndFinish = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       let targetCalories = tdee;
@@ -100,7 +89,7 @@ export default function RecommendScreen() {
 
       if (error) throw error;
 
-      router.replace("/main");
+      resetTo(router, "/preferences");
     } catch (err: any) {
       Alert.alert("Oops", err.message || "Something went wrong");
     } finally {
@@ -111,14 +100,14 @@ export default function RecommendScreen() {
   if (loading) {
     return (
       <SafeAreaView style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={s.loadingText}>Preparing your plan...</Text>
       </SafeAreaView>
     );
   }
 
-  // Determine which goal is recommended based on BMI
-  const getRecommendedGoal = () => {
+  // Recommendation
+  const getRecommendedGoal = (): GoalKey | null => {
     if (!bmi) return null;
     if (bmi < 18.5) return "gain";
     if (bmi >= 18.5 && bmi <= 24.9) return "maintain";
@@ -128,251 +117,178 @@ export default function RecommendScreen() {
 
   const recommendedGoal = getRecommendedGoal();
 
-  const goals = [
-    {
-      key: "lose" as const,
-      title: "Lose Weight",
-      desc: `${tdee - 500} kcal/day`,
-      subtitle: "-500 kcal deficit",
-      color: "#f87171",
-      gradient: ["#fef2f2", "#fee2e2"],
-    },
-    {
-      key: "maintain" as const,
-      title: "Maintain Weight",
-      desc: `${tdee} kcal/day`,
-      subtitle: "Perfect balance",
-      color: "#10b981",
-      gradient: ["#ecfdf5", "#d1fae5"],
-    },
-    {
-      key: "gain" as const,
-      title: "Gain Weight",
-      desc: `${tdee + 500} kcal/day`,
-      subtitle: "+500 kcal surplus",
-      color: "#60a5fa",
-      gradient: ["#eff6ff", "#dbeafe"],
-    },
+  const goals: {
+    key: GoalKey;
+    title: string;
+    kcal: number;
+    subtitle: string;
+    color: string;
+    icon: IconName;
+  }[] = [
+    { key: "lose", title: "Lose Weight", kcal: tdee - 500, subtitle: "-500 kcal deficit", color: "#f87171", icon: "arrow-down" },
+    { key: "maintain", title: "Maintain Weight", kcal: tdee, subtitle: "Perfect balance", color: "#0B6FDB", icon: "remove" },
+    { key: "gain", title: "Gain Weight", kcal: tdee + 500, subtitle: "+500 kcal surplus", color: "#60a5fa", icon: "arrow-up" },
   ];
 
   return (
-    <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
-      {/* Premium Header */}
+    <SafeAreaView style={s.safeArea} edges={["left", "right", "bottom"]}>
       <View style={s.topHeader}>
-        <Text style={s.title}>What’s Your Goal?</Text>
+        <StepProgress step={4} />
       </View>
 
       <ScrollView
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={s.title}>What&apos;s Your Goal?</Text>
         <Text style={s.subtitle}>
-          Your daily maintenance: <Text style={s.tdee}>{tdee}</Text> kcal
+          Your daily maintenance: <Text style={s.tdee}>{tdee.toLocaleString()}</Text> kcal
         </Text>
 
-        <View style={s.cards}>
-          {goals.map((goal) => (
+        {goals.map((goal) => {
+          const active = selected === goal.key;
+          return (
             <Pressable
               key={goal.key}
-              style={[
+              style={({ pressed }) => [
                 s.card,
-                selected === goal.key && s.selectedCard,
+                active && s.selectedCard,
+                pressed && s.pressed,
               ]}
               onPress={() => setSelected(goal.key)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
             >
-              <View style={s.cardHeader}>
-                <View style={[s.dot, { backgroundColor: goal.color }]} />
-                <Text style={[s.cardTitle, selected === goal.key && s.selectedTitle]}>
-                  {goal.title}
-                </Text>
-                {recommendedGoal === goal.key && (
-                  <View style={s.recommendedBadge}>
-                    <Text style={s.recommendedText}>Recommended</Text>
-                  </View>
-                )}
+              <View style={[s.goalIcon, { backgroundColor: goal.color + "26" }]}>
+                <Ionicons name={goal.icon} size={26} color={goal.color} />
               </View>
 
-              <Text style={[s.cardDesc, selected === goal.key && s.selectedDesc]}>
-                {goal.desc}
-              </Text>
-              <Text style={s.cardSub}>{goal.subtitle}</Text>
-            </Pressable>
-          ))}
-        </View>
+              <View style={s.cardInfo}>
+                <View style={s.titleRow}>
+                  <Text style={s.cardTitle}>{goal.title}</Text>
+                  {recommendedGoal === goal.key && (
+                    <View style={s.recommendedBadge}>
+                      <Text style={s.recommendedText}>Recommended</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={s.cardSub}>{goal.subtitle}</Text>
+              </View>
 
-        {/* Final CTA */}
-        <AnimatedPressable
-          style={[
-            s.ctaButton,
-            loading && s.disabledButton,
-            animatedCtaStyle,
-          ]}
-          onPressIn={() => (ctaScale.value = withSpring(0.96))}
-          onPressOut={() => (ctaScale.value = withSpring(1))}
-          onPress={saveAndFinish}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={s.ctaText}>Start My Journey!</Text>
-          )}
-        </AnimatedPressable>
+              <View style={s.kcalWrap}>
+                <Text style={[s.kcal, active && s.kcalActive]}>
+                  {goal.kcal.toLocaleString()}
+                </Text>
+                <Text style={s.kcalUnit}>kcal/day</Text>
+              </View>
+            </Pressable>
+          );
+        })}
       </ScrollView>
+
+      <View style={s.bottomBar}>
+        <Pressable
+          style={({ pressed }) => [s.ctaButton, pressed && s.pressed]}
+          onPress={saveAndFinish}
+          accessibilityRole="button"
+        >
+          <Text style={s.ctaText}>Continue</Text>
+          <Ionicons name="arrow-forward" size={20} color={colors.onAccent} />
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
 
-// PREMIUM & RESPONSIVE STYLES + RECOMMENDED BADGE
-const s = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fff9",
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#f8fff9",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  topHeader: {
-    paddingTop: Platform.OS === "android" ? 45 : 24,
-    paddingBottom: 40,
-    paddingHorizontal: 24,
-    backgroundColor: "#f8fff9",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "900",
-    color: "#064e3b",
-    textAlign: "center",
-    letterSpacing: 0.8,
-    marginTop: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#059669",
-    textAlign: "center",
-    marginBottom: 40,
-    fontWeight: "700",
-    paddingHorizontal: 20,
-    lineHeight: 26,
-  },
-  tdee: {
-    fontWeight: "900",
-    color: "#10b981",
-    fontSize: 17,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 100,
-    alignItems: "center",
-    flexGrow: 1,
-  },
-  cards: {
-    gap: 22,
-    width: "100%",
-    maxWidth: 540,
-    marginBottom: 50,
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    paddingVertical: 32,
-    paddingHorizontal: 28,
-    borderRadius: 32,
-    alignItems: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22,
-    shadowRadius: 28,
-    elevation: 20,
-    borderWidth: 2.5,
-    borderColor: "#ecfdf5",
-  },
-  selectedCard: {
-    borderColor: "#10b981",
-    backgroundColor: "#f0fdf4",
-    shadowOpacity: 0.3,
-    transform: [{ scale: 1.04 }],
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 14,
-    flexWrap: "wrap",
-  },
-  dot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: "#fff",
-  },
-  cardTitle: {
-    fontSize: 25,
-    fontWeight: "900",
-    color: "#065f46",
-  },
-  selectedTitle: {
-    color: "#10b981",
-  },
-  cardDesc: {
-    fontSize: 30,
-    fontWeight: "900",
-    color: "#065f46",
-    marginVertical: 10,
-    letterSpacing: 0.5,
-  },
-  selectedDesc: {
-    color: "#10b981",
-  },
-  cardSub: {
-    fontSize: 17,
-    color: "#059669",
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  recommendedBadge: {
-    backgroundColor: "#10b981",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginLeft: 8,
-  },
-  recommendedText: {
-    color: "white",
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  ctaButton: {
-    backgroundColor: "#10b981",
-    paddingVertical: 22,
-    paddingHorizontal: 40,
-    borderRadius: 28,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 25,
-    elevation: 22,
-    minWidth: 280,
-  },
-  disabledButton: {
-    opacity: 0.75,
-  },
-  ctaText: {
-    color: "#ffffff",
-    fontSize: 21,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  loadingText: {
-    marginTop: 24,
-    fontSize: 18,
-    color: "#059669",
-    fontWeight: "700",
-  },
-});
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: c.background },
+    pressed: { opacity: 0.8 },
+    loadingContainer: {
+      flex: 1,
+      backgroundColor: c.background,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    topHeader: {
+      paddingTop: Platform.OS === "android" ? 60 : 64,
+      paddingHorizontal: 24,
+    },
+    scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
+    title: {
+      fontSize: 26,
+      fontWeight: "800",
+      color: c.textPrimary,
+      textAlign: "center",
+    },
+    subtitle: {
+      fontSize: 15,
+      color: c.textSecondary,
+      textAlign: "center",
+      marginTop: 6,
+      marginBottom: 22,
+      fontWeight: "600",
+    },
+    tdee: { fontWeight: "900", color: c.accent, fontSize: 16 },
+
+    card: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      paddingVertical: 18,
+      paddingHorizontal: 16,
+      marginBottom: 14,
+    },
+    selectedCard: { borderColor: c.accent, backgroundColor: c.surfaceAlt },
+    goalIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cardInfo: { flex: 1 },
+    titleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+    cardTitle: { fontSize: 17, fontWeight: "800", color: c.textPrimary },
+    cardSub: { fontSize: 13.5, color: c.textSecondary, marginTop: 3, fontWeight: "600" },
+    recommendedBadge: {
+      backgroundColor: c.accent,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    recommendedText: { color: c.onAccent, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
+    kcalWrap: { alignItems: "flex-end" },
+    kcal: { fontSize: 20, fontWeight: "900", color: c.textPrimary },
+    kcalActive: { color: c.accent },
+    kcalUnit: { fontSize: 11, fontWeight: "600", color: c.textMuted, marginTop: 1 },
+
+    bottomBar: {
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      paddingBottom: 16,
+      backgroundColor: c.background,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    ctaButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      backgroundColor: c.accent,
+      paddingVertical: 17,
+      borderRadius: 16,
+    },
+    ctaText: { color: c.onAccent, fontSize: 17, fontWeight: "800", letterSpacing: 0.3 },
+    loadingText: {
+      marginTop: 24,
+      fontSize: 18,
+      color: c.textSecondary,
+      fontWeight: "700",
+    },
+  });
