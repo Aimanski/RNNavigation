@@ -130,12 +130,13 @@ const CHART_HEIGHT = 110;
 const CHART_DAYS = 14;
 
 const GRAM_OPTIONS = [25, 50, 75, 100, 125, 150, 175, 200];
-const MEAL_TYPES = ["all", "breakfast", "lunch", "dinner"];
+const MEAL_TYPES = ["all", "breakfast", "lunch", "dinner", "snack"];
 const mealTypeLabel: Record<string, string> = {
   all: "All Meals",
   breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
+  snack: "Snack",
 };
 
 type Styles = ReturnType<typeof makeStyles>;

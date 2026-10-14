@@ -52,7 +52,7 @@ const chunk = <T,>(items: T[], size: number): T[][] => {
   return pages;
 };
 
-type MealType = "breakfast" | "lunch" | "dinner";
+type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 type SectionKey = MealType | "scanned";
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -63,6 +63,7 @@ const MEAL_SECTIONS: { key: MealType; title: string; icon: IconName }[] = [
   { key: "breakfast", title: "Breakfast", icon: "sunny" },
   { key: "lunch", title: "Lunch", icon: "partly-sunny" },
   { key: "dinner", title: "Dinner", icon: "moon" },
+  { key: "snack", title: "Snack", icon: "cafe" },
 ];
 
 // Cube
@@ -306,7 +307,7 @@ export default function MealplanScreen() {
   const [warnings, setWarnings] = useState<Record<string, string[]>>(cached?.warnings ?? {});
   const [loading, setLoading] = useState(!cached);
   const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
-    breakfast: false, lunch: false, dinner: false, scanned: false,
+    breakfast: false, lunch: false, dinner: false, snack: false, scanned: false,
   });
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -426,6 +427,7 @@ export default function MealplanScreen() {
     breakfast: catalogFoods.filter((f) => f.meal_type === "breakfast" || f.meal_type === "all"),
     lunch:     catalogFoods.filter((f) => f.meal_type === "lunch"     || f.meal_type === "all"),
     dinner:    catalogFoods.filter((f) => f.meal_type === "dinner"    || f.meal_type === "all"),
+    snack:     catalogFoods.filter((f) => f.meal_type === "snack"     || f.meal_type === "all"),
   };
 
   // Suggested

@@ -161,6 +161,8 @@ function buildMeal(
   const wanted = target >= 650 ? 4 : target >= 380 ? 3 : target >= 160 ? 2 : 1;
   const picked = ranked.slice(0, Math.min(wanted, ranked.length));
   if (picked.length === 0) return [];
+  const smallest = (c: Candidate) => c.food.calories * (MIN_UNITS / 4);
+  while (picked.length > 1 && picked.reduce((sum, c) => sum + smallest(c), 0) > target * 1.05) picked.pop();
 
   // Shares
   const weights = picked.map((_, i) => (i === 0 ? 0.45 : 0.55 / Math.max(picked.length - 1, 1)));
@@ -226,9 +228,12 @@ export function generateWeekPlan(input: PlanInput): WeekPlan {
     .map((food) => ({ food, tags: tasteTagsFor([food.name, ...ingredientNames(food.ingredients)]) }));
 
   const poolFor = (slot: Slot): Candidate[] => {
-    const types = slot === "snack" ? ["all", "breakfast"] : [slot, "all"];
-    const matched = candidates.filter((c) => types.includes(c.food.meal_type));
-    return matched.length >= 2 ? matched : candidates;
+    const attempts = slot === "snack" ? [["snack", "all"], ["all", "breakfast"]] : [[slot, "all"]];
+    for (const types of attempts) {
+      const matched = candidates.filter((c) => types.includes(c.food.meal_type));
+      if (matched.length >= 2) return matched;
+    }
+    return candidates;
   };
 
   const usedWeek = new Map<string, number>();
@@ -247,24 +252,42 @@ export function generateWeekPlan(input: PlanInput): WeekPlan {
     });
 
     // Balance
-    const flat = meals.flatMap((m) => m.items);
-    const dayKcal = () => flat.reduce((sum, it) => sum + itemKcal(it.food, it.grams), 0);
-    for (let pass = 0; pass < 80 && flat.length > 0; pass++) {
-      const diff = goal - dayKcal();
-      if (Math.abs(diff) <= goal * 0.015) break;
-      const up = diff > 0;
-      const movable = flat.filter((it) =>
-        up
-          ? it.grams + unitOf(it.food) <= maxGramsOf(it.food, "lunch")
-          : it.grams - unitOf(it.food) >= minGramsOf(it.food)
+    const flatItems = () => meals.flatMap((m) => m.items);
+    const dayKcal = () => flatItems().reduce((sum, it) => sum + itemKcal(it.food, it.grams), 0);
+    const balance = () => {
+      for (let pass = 0; pass < 80; pass++) {
+        const flat = flatItems();
+        if (flat.length === 0) return;
+        const diff = goal - dayKcal();
+        if (Math.abs(diff) <= goal * 0.015) return;
+        const up = diff > 0;
+        const movable = flat.filter((it) =>
+          up
+            ? it.grams + unitOf(it.food) <= maxGramsOf(it.food, "lunch")
+            : it.grams - unitOf(it.food) >= minGramsOf(it.food)
+        );
+        if (movable.length === 0) return;
+        const pick = movable[pass % movable.length];
+        pick.grams = clamp(
+          pick.grams + (up ? 1 : -1) * unitOf(pick.food),
+          minGramsOf(pick.food),
+          maxGramsOf(pick.food, "lunch")
+        );
+      }
+    };
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      balance();
+      if (dayKcal() <= goal * 1.03) break;
+      // Drop the food with the largest smallest-portion
+      const crowded = meals.filter((m) => m.items.length > 1);
+      if (crowded.length === 0) break;
+      const candidatesToDrop = crowded.flatMap((m) => m.items.map((it) => ({ m, it })));
+      candidatesToDrop.sort(
+        (a, b) => b.it.food.calories * (MIN_UNITS / 4) - a.it.food.calories * (MIN_UNITS / 4)
       );
-      if (movable.length === 0) break;
-      const pick = movable[pass % movable.length];
-      pick.grams = clamp(
-        pick.grams + (up ? 1 : -1) * unitOf(pick.food),
-        minGramsOf(pick.food),
-        maxGramsOf(pick.food, "lunch")
-      );
+      const victim = candidatesToDrop[0];
+      victim.m.items = victim.m.items.filter((it) => it !== victim.it);
     }
 
     meals.forEach((m) => {
