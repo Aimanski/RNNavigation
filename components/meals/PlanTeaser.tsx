@@ -6,7 +6,6 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../ui/AppText";
 import { WeekPlan } from "../../lib/health/mealPlan";
 import { Colors, useTheme } from "../../providers/ThemeProvider";
-import { SUGGEST_GREEN, suggestTint } from "./palette";
 
 export default function PlanTeaser({
   plan,
@@ -21,8 +20,8 @@ export default function PlanTeaser({
   todayIndex: number;
   onOpen: () => void;
 }) {
-  const { colors, isDark } = useTheme();
-  const s = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const day = plan ? plan.days[Math.max(todayIndex, 0)] : undefined;
   const count = day ? day.meals.reduce((total, m) => total + m.items.length, 0) : 0;
 
@@ -30,7 +29,7 @@ export default function PlanTeaser({
     <View style={s.card}>
       <View style={s.headRow}>
         <View style={s.headIcon}>
-          <Ionicons name="sparkles" size={20} color="#ffffff" />
+          <Ionicons name="sparkles" size={20} color={colors.onAccent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={s.title}>Suggested For You</Text>
@@ -42,7 +41,7 @@ export default function PlanTeaser({
                 : "Set up your profile to get a weekly plan"}
           </Text>
         </View>
-        {loading && !plan && <ActivityIndicator size="small" color={SUGGEST_GREEN} />}
+        {loading && !plan && <ActivityIndicator size="small" color={colors.accent} />}
       </View>
 
       {!!plan && (
@@ -71,21 +70,21 @@ export default function PlanTeaser({
         accessibilityLabel="View your meal plan"
       >
         <Text style={s.buttonText}>View Your Meal Plan</Text>
-        <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+        <Ionicons name="arrow-forward" size={18} color={colors.onAccent} />
       </Pressable>
     </View>
   );
 }
 
-const makeStyles = (c: Colors, isDark: boolean) => {
-  const tint = suggestTint(isDark);
+const makeStyles = (c: Colors) => {
+  const tint = c.surfaceAlt;
   return StyleSheet.create({
     pressed: { opacity: 0.85 },
     card: {
       backgroundColor: c.surface,
       borderRadius: 22,
       borderWidth: 2,
-      borderColor: SUGGEST_GREEN,
+      borderColor: c.accent,
       padding: 16,
       marginBottom: 14,
       gap: 14,
@@ -95,7 +94,7 @@ const makeStyles = (c: Colors, isDark: boolean) => {
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: SUGGEST_GREEN,
+      backgroundColor: c.accent,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -111,19 +110,19 @@ const makeStyles = (c: Colors, isDark: boolean) => {
       justifyContent: "flex-end",
       overflow: "hidden",
     },
-    barFill: { width: "100%", backgroundColor: "#86d6a3", borderRadius: 8 },
-    barToday: { backgroundColor: SUGGEST_GREEN },
+    barFill: { width: "100%", backgroundColor: c.accentLight, borderRadius: 8 },
+    barToday: { backgroundColor: c.accent },
     weekLabel: { fontSize: 12, fontWeight: "700", color: c.textMuted },
-    weekLabelToday: { color: SUGGEST_GREEN, fontWeight: "800" },
+    weekLabelToday: { color: c.accent, fontWeight: "800" },
     button: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      backgroundColor: SUGGEST_GREEN,
+      backgroundColor: c.accent,
       borderRadius: 14,
       paddingVertical: 14,
     },
-    buttonText: { color: "#ffffff", fontSize: 16, fontWeight: "800" },
+    buttonText: { color: c.onAccent, fontSize: 16, fontWeight: "800" },
   });
 };
