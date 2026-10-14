@@ -84,6 +84,10 @@ export default function SettingScreen() {
       router.push({ pathname: "/preferences", params: { mode: "edit" } });
       return;
     }
+    if (title === "Taste Preferences") {
+      router.push({ pathname: "/tastes", params: { mode: "edit" } });
+      return;
+    }
 
     const route = routes[title];
     if (route) {
@@ -97,6 +101,7 @@ export default function SettingScreen() {
     { title: "Account", icon: "person-circle-outline" },
     { title: "Update Info", icon: "information-circle-outline" },
     { title: "Food Preferences", icon: "nutrition-outline" },
+    { title: "Taste Preferences", icon: "restaurant-outline" },
     { title: "Set reminders", icon: "notifications-outline" },
     { title: "Water", icon: "water-outline" },
     { title: "Blood Pressure", icon: "pulse-outline" },

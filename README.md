@@ -6,7 +6,8 @@ A calorie and weight tracking app for Android (and iOS), built with Expo and Sup
 
 - Sign up and sign in with email or Google, with email verification
 - Personal profile with BMI, BMR, TDEE and a daily calorie goal that updates when weight, height or activity changes
-- Meal plans, meal details and a food catalog with allergy warnings
+- Taste questions during setup and a weekly "Suggested For You" meal plan that covers the daily calorie goal, avoids allergens and follows your tastes
+- Meal details and a food catalog with allergy warnings and green highlights for suggested foods
 - Barcode and photo food scanning (Open Food Facts and AI food analysis)
 - Calorie history, weight, water, sleep, activity and blood pressure tracking
 - Reminders, light and dark themes

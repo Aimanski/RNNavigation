@@ -83,7 +83,7 @@ export default function PreferencesScreen() {
       const finalList = pending && !has(pending) ? [...selected, pending] : selected;
       await saveAllergies(userId, finalList);
       if (isEdit) goBackOr(router, "/setting");
-      else resetTo(router, "/main");
+      else resetTo(router, "/tastes");
     } catch (err: any) {
       const message = err?.message || "Something went wrong. Please try again.";
       Alert.alert(
@@ -94,7 +94,7 @@ export default function PreferencesScreen() {
           : [
               { text: "Try again" },
               // Onboarding
-              { text: "Skip for now", onPress: () => resetTo(router, "/main") },
+              { text: "Skip for now", onPress: () => resetTo(router, "/tastes") },
             ]
       );
     } finally {

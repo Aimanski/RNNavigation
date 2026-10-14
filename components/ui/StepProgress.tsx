@@ -5,7 +5,7 @@ import { StyleSheet, View } from "react-native";
 import { Text } from "./AppText";
 import { Colors, useTheme } from "../../providers/ThemeProvider";
 
-export const ONBOARDING_STEPS = 5;
+export const ONBOARDING_STEPS = 6;
 
 export default function StepProgress({ step }: { step: number }) {
   const { colors } = useTheme();

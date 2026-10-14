@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,9 +14,14 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import SuggestedPlan from "../components/meals/SuggestedPlan";
+import { SUGGEST_GREEN, suggestTint } from "../components/meals/palette";
 import { Text, TextInput } from "../components/ui/AppText";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fetchAllergies, findAllergens, ingredientNames } from "../lib/health/allergies";
+import { generateWeekPlan, PlanFood, PlanItem, todayPH, weekStartPH } from "../lib/health/mealPlan";
+import { hasAnyTaste, useTastes } from "../lib/health/tastes";
 import { cache } from "../lib/cache";
 import { getSessionUser } from "../lib/auth/session";
 import { supabase } from "../lib/supabase";
@@ -61,6 +66,9 @@ type Food = {
   fat: number;
   meal_type: string;
   image_url: string;
+  // Serving
+  serving_g?: number | null;
+  ingredients?: unknown;
   // Ownership
   user_id?: string | null;
   created_at?: string;
@@ -83,14 +91,21 @@ const DANGER_COLOR = "#ef4444";
 // Columns
 const FOOD_COLUMNS = "id, name, calories, protein, carbs, fat, meal_type, image_url, created_at";
 
+// Fallback
+const COLUMN_SETS = [
+  `${FOOD_COLUMNS}, ingredients, serving_g, user_id`,
+  `${FOOD_COLUMNS}, ingredients, user_id`,
+  FOOD_COLUMNS,
+];
+
 const fetchFoods = async () => {
-  const withOwner = await supabase
-    .from("foods")
-    .select(`${FOOD_COLUMNS}, user_id`)
-    .order("name", { ascending: true });
-  if (!withOwner.error) return withOwner;
-  // Fallback
-  return supabase.from("foods").select(FOOD_COLUMNS).order("name", { ascending: true });
+  let last: { data: Food[] | null; error: { message?: string } | null } = { data: null, error: null };
+  for (const columns of COLUMN_SETS) {
+    const res = await supabase.from("foods").select(columns).order("name", { ascending: true });
+    last = { data: res.data as unknown as Food[] | null, error: res.error };
+    if (!res.error) return last;
+  }
+  return last;
 };
 
 const MEAL_SECTIONS: { key: MealType; title: string; icon: IconName }[] = [
@@ -107,6 +122,7 @@ const FoodCube = ({
   s,
   colors,
   allergens,
+  suggested,
 }: {
   food: Food;
   onPress: () => void;
@@ -114,9 +130,15 @@ const FoodCube = ({
   s: ReturnType<typeof makeStyles>;
   colors: Colors;
   allergens?: string[];
+  suggested?: boolean;
 }) => (
   <Pressable
-    style={[s.foodCube, !!allergens?.length && s.foodCubeWarn, { width: size, height: size }]}
+    style={[
+      s.foodCube,
+      !!suggested && !allergens?.length && s.foodCubeSuggest,
+      !!allergens?.length && s.foodCubeWarn,
+      { width: size, height: size },
+    ]}
     onPress={onPress}
     android_ripple={{ color: "rgba(11, 111, 219,0.2)" }}
     accessibilityRole="button"
@@ -138,6 +160,12 @@ const FoodCube = ({
       <View style={s.allergenBadge}>
         <Ionicons name="warning" size={12} color="#ffffff" />
         <Text style={s.allergenBadgeText}>Allergen</Text>
+      </View>
+    )}
+    {!!suggested && !allergens?.length && (
+      <View style={s.suggestBadge}>
+        <Ionicons name="sparkles" size={12} color="#ffffff" />
+        <Text style={s.allergenBadgeText}>Suggested</Text>
       </View>
     )}
     <View style={s.cubeChevron}>
@@ -162,6 +190,7 @@ const PagedCubeGrid = ({
   emptyTitle,
   emptyText,
   warnings,
+  suggestedIds,
 }: {
   foods: Food[];
   onPress: (food: Food) => void;
@@ -171,6 +200,7 @@ const PagedCubeGrid = ({
   emptyTitle: string;
   emptyText?: string;
   warnings: Record<string, string[]>;
+  suggestedIds?: Set<string>;
 }) => {
   const scrollRef = useRef<ScrollView>(null);
   const [width, setWidth] = useState(DEFAULT_GRID_WIDTH);
@@ -207,6 +237,7 @@ const PagedCubeGrid = ({
           s={s}
           colors={colors}
           allergens={warnings[food.id]}
+          suggested={suggestedIds?.has(food.id)}
         />
       ))}
       {row.length === 1 && <View style={{ width: cube }} />}
@@ -330,6 +361,27 @@ export default function MealplanScreen() {
   });
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Plan
+  const { tastes, reload: reloadTastes } = useTastes();
+  const weekStart = useMemo(() => weekStartPH(), []);
+  const today = todayPH();
+  const [shuffle, setShuffle] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(-1);
+
+  useEffect(() => {
+    AsyncStorage.getItem(`mealplan:shuffle:${weekStart}`)
+      .then((value) => {
+        if (value) setShuffle(parseInt(value, 10) || 0);
+      })
+      .catch(() => {});
+  }, [weekStart]);
+
+  const onShuffle = () => {
+    const next = shuffle + 1;
+    setShuffle(next);
+    AsyncStorage.setItem(`mealplan:shuffle:${weekStart}`, String(next)).catch(() => {});
+  };
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -342,6 +394,7 @@ export default function MealplanScreen() {
           if (!user) { router.replace("/"); return; }
           const uid = user.id;
           const todayStr = getTodayPHDateString();
+          reloadTastes();
 
           // Window
           const since = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
@@ -358,21 +411,14 @@ export default function MealplanScreen() {
             fetchAllergies(uid),
           ]);
 
-          if (foodsRes.error) throw foodsRes.error;
+          if (foodsRes.error) throw new Error(foodsRes.error.message || "Failed to load foods");
           const fetchedFoods: Food[] = foodsRes.data || [];
 
           // Allergies
           const nextWarnings: Record<string, string[]> = {};
           if (allergies && allergies.length > 0) {
-            const ingredientsRes = await supabase
-              .from("foods")
-              .select("id, ingredients")
-              .not("ingredients", "is", null);
-            const ingredientsById = new Map<string, string[]>(
-              (ingredientsRes.data || []).map((row: any) => [row.id, ingredientNames(row.ingredients)])
-            );
             fetchedFoods.forEach((food) => {
-              const hits = findAllergens(allergies, [food.name, ...(ingredientsById.get(food.id) ?? [])]);
+              const hits = findAllergens(allergies, [food.name, ...ingredientNames(food.ingredients)]);
               if (hits.length > 0) nextWarnings[food.id] = hits;
             });
           }
@@ -413,7 +459,7 @@ export default function MealplanScreen() {
       return () => {
         active = false;
       };
-    }, [router])
+    }, [router, reloadTastes])
   );
 
   const goToFoodDetail = (food: Food) => {
@@ -453,6 +499,50 @@ export default function MealplanScreen() {
     breakfast: catalogFoods.filter((f) => f.meal_type === "breakfast" || f.meal_type === "all"),
     lunch:     catalogFoods.filter((f) => f.meal_type === "lunch"     || f.meal_type === "all"),
     dinner:    catalogFoods.filter((f) => f.meal_type === "dinner"    || f.meal_type === "all"),
+  };
+
+  // Suggested
+  const plan = useMemo(() => {
+    if (!goalCalories || catalogFoods.length === 0) return null;
+    const result = generateWeekPlan({
+      foods: catalogFoods as PlanFood[],
+      goal: goalCalories,
+      prefs: tastes ?? {},
+      blocked: new Set(Object.keys(warnings)),
+      weekStart,
+      seed: `${userId ?? "guest"}:${shuffle}`,
+    });
+    return result.foodIds.size > 0 ? result : null;
+  }, [catalogFoods, goalCalories, tastes, warnings, weekStart, userId, shuffle]);
+
+  const todayIndex = plan ? plan.days.findIndex((d) => d.date === today) : -1;
+  const activeDay = selectedDay >= 0 ? selectedDay : Math.max(todayIndex, 0);
+
+  const goToPlanItem = (item: PlanItem) => {
+    const { food } = item;
+    const serving = food.serving_g && food.serving_g > 0 ? food.serving_g : 100;
+    router.push({
+      pathname: "/mealDetail",
+      params: {
+        name: food.name,
+        calories: food.calories.toString(),
+        protein: (food.protein || 0).toFixed(1),
+        carbs: (food.carbs || 0).toFixed(1),
+        fat: (food.fat || 0).toFixed(1),
+        servings: String(item.grams / serving),
+        portion: `${item.grams} g`,
+        items: JSON.stringify([{
+          id: food.id,
+          name: food.name,
+          calories: food.calories,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat,
+          desc: `${food.calories} kcal`,
+          image_url: food.image_url,
+        }]),
+      },
+    });
   };
 
   const query = searchQuery.trim().toLowerCase();
@@ -535,6 +625,30 @@ export default function MealplanScreen() {
           </View>
         )}
 
+        {/* Suggested */}
+        <SuggestedPlan
+          plan={plan}
+          goal={goalCalories}
+          loading={initialLoading}
+          selectedDay={activeDay}
+          today={today}
+          hasTastes={hasAnyTaste(tastes)}
+          onSelectDay={setSelectedDay}
+          onShuffle={onShuffle}
+          onOpenItem={goToPlanItem}
+          onSetTastes={() => router.push({ pathname: "/tastes", params: { mode: "edit" } })}
+          onSetGoal={() => router.push("/updateInfo")}
+        />
+
+        {!!plan && (
+          <View style={s.suggestNotice}>
+            <Ionicons name="sparkles" size={18} color={SUGGEST_GREEN} />
+            <Text style={s.allergyNoticeText}>
+              Foods marked <Text style={s.suggestNoticeBold}>Suggested</Text> are part of your weekly plan.
+            </Text>
+          </View>
+        )}
+
         {/* Meals */}
         {MEAL_SECTIONS.map(({ key, title, icon }) => (
           <FoodSection
@@ -554,6 +668,7 @@ export default function MealplanScreen() {
                 foods={mealSections[key]}
                 onPress={goToFoodDetail}
                 warnings={warnings}
+                suggestedIds={plan?.foodIds}
                 s={s}
                 colors={colors}
                 emptyIcon="restaurant-outline"
@@ -584,6 +699,7 @@ export default function MealplanScreen() {
               foods={scannedFoods}
               onPress={goToFoodDetail}
               warnings={warnings}
+              suggestedIds={plan?.foodIds}
               s={s}
               colors={colors}
               emptyIcon="camera-outline"
@@ -636,6 +752,7 @@ export default function MealplanScreen() {
               foods={filteredFoods}
               onPress={goToFoodDetail}
               warnings={warnings}
+              suggestedIds={plan?.foodIds}
               s={s}
               colors={colors}
               emptyIcon="search"
@@ -794,6 +911,32 @@ const makeStyles = (c: Colors, isDark: boolean) => {
     cubeCalorieText: { color: c.onAccent, fontSize: 11, fontWeight: "700" },
     cubeChevron: { position: "absolute", top: 10, right: 10 },
     foodCubeWarn: { borderWidth: 2.5, borderColor: DANGER_COLOR },
+    foodCubeSuggest: { borderWidth: 2.5, borderColor: SUGGEST_GREEN },
+    suggestBadge: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: SUGGEST_GREEN,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    suggestNotice: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: suggestTint(isDark),
+      borderWidth: 1.5,
+      borderColor: SUGGEST_GREEN,
+      borderRadius: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      marginBottom: 14,
+    },
+    suggestNoticeBold: { fontWeight: "800", color: SUGGEST_GREEN },
     allergenBadge: {
       position: "absolute",
       top: 10,

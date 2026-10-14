@@ -43,13 +43,20 @@ type Ingredient = {
 };
 
 export default function MealDetailScreen() {
-  const { name, calories, protein, carbs, fat, items } = useLocalSearchParams();
+  const { name, calories, protein, carbs, fat, items, servings: servingsParam, portion } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [adding, setAdding] = useState(false);
-  const [servings, setServings] = useState(1);
+  // Portion
+  const initialServings = (() => {
+    const n = parseFloat(typeof servingsParam === "string" ? servingsParam : "");
+    return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SERVINGS) : 1;
+  })();
+  const stepSize = Number.isInteger(initialServings) ? 1 : (initialServings * 2) % 1 === 0 ? 0.5 : 0.25;
+  const minServings = stepSize;
+  const [servings, setServings] = useState(initialServings);
   const [showAllIngredients, setShowAllIngredients] = useState(false);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loadingIngredients, setLoadingIngredients] = useState(false);
@@ -241,9 +248,11 @@ export default function MealDetailScreen() {
                 </Text>
               )}
             </View>
-            {servings > 1 && (
+            {servings !== 1 && (
               <View style={s.servingTag}>
-                <Text style={s.servingTagText}>{servings} servings</Text>
+                <Text style={s.servingTagText}>
+                  {typeof portion === "string" && servings === initialServings ? portion : `${servings} servings`}
+                </Text>
               </View>
             )}
           </View>
@@ -377,9 +386,9 @@ export default function MealDetailScreen() {
       <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
         <View style={s.stepper}>
           <Pressable
-            style={({ pressed }) => [s.stepBtn, servings <= 1 && s.stepBtnOff, pressed && s.pressed]}
-            onPress={() => setServings((n) => Math.max(1, n - 1))}
-            disabled={servings <= 1 || adding}
+            style={({ pressed }) => [s.stepBtn, servings <= minServings && s.stepBtnOff, pressed && s.pressed]}
+            onPress={() => setServings((n) => Math.max(minServings, n - stepSize))}
+            disabled={servings <= minServings || adding}
             accessibilityRole="button"
             accessibilityLabel="Fewer servings"
             hitSlop={6}
@@ -389,7 +398,7 @@ export default function MealDetailScreen() {
           <Text style={s.stepValue} accessibilityLabel={`${servings} servings`}>{servings}</Text>
           <Pressable
             style={({ pressed }) => [s.stepBtn, servings >= MAX_SERVINGS && s.stepBtnOff, pressed && s.pressed]}
-            onPress={() => setServings((n) => Math.min(MAX_SERVINGS, n + 1))}
+            onPress={() => setServings((n) => Math.min(MAX_SERVINGS, n + stepSize))}
             disabled={servings >= MAX_SERVINGS || adding}
             accessibilityRole="button"
             accessibilityLabel="More servings"
