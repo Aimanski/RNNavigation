@@ -54,13 +54,15 @@ export default function VerifyEmailScreen() {
   const email = (params.email || "").trim();
   const isLinkMode = params.mode === "link";
 
-  const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""));
+  const [code, setCode] = useState("");
+  const [codeFocused, setCodeFocused] = useState(false);
+  const digits = Array.from({ length: CODE_LENGTH }, (_, i) => code[i] ?? "");
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [checking, setChecking] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [sendingInitialLink, setSendingInitialLink] = useState(isLinkMode);
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const codeInputRef = useRef<TextInput | null>(null);
   const initialSendStarted = useRef(false);
 
   // Countdown
@@ -173,43 +175,9 @@ export default function VerifyEmailScreen() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const focusInput = (index: number) => {
-    if (index >= 0 && index < CODE_LENGTH) inputRefs.current[index]?.focus();
+  const handleCodeChange = (text: string) => {
+    setCode(text.replace(/[^0-9]/g, "").slice(0, CODE_LENGTH));
   };
-
-  const handleDigitChange = (text: string, index: number) => {
-    // Paste
-    const cleaned = text.replace(/[^0-9]/g, "");
-    if (cleaned.length > 1) {
-      const next = Array(CODE_LENGTH).fill("");
-      for (let i = 0; i < CODE_LENGTH && i < cleaned.length; i++) next[i] = cleaned[i];
-      setDigits(next);
-      const lastFilled = Math.min(cleaned.length, CODE_LENGTH) - 1;
-      focusInput(lastFilled === CODE_LENGTH - 1 ? lastFilled : lastFilled + 1);
-      return;
-    }
-
-    setDigits((prev) => {
-      const next = [...prev];
-      next[index] = cleaned;
-      return next;
-    });
-
-    if (cleaned && index < CODE_LENGTH - 1) focusInput(index + 1);
-  };
-
-  const handleKeyPress = (key: string, index: number) => {
-    if (key === "Backspace" && !digits[index] && index > 0) {
-      focusInput(index - 1);
-      setDigits((prev) => {
-        const next = [...prev];
-        next[index - 1] = "";
-        return next;
-      });
-    }
-  };
-
-  const code = digits.join("");
 
   // Verify
   const handleVerify = async () => {
@@ -241,8 +209,8 @@ export default function VerifyEmailScreen() {
     } catch (err: any) {
       const msg = err.message || "Invalid or expired code. Please try again.";
       Alert.alert("Verification Failed", msg);
-      setDigits(Array(CODE_LENGTH).fill(""));
-      focusInput(0);
+      setCode("");
+      codeInputRef.current?.focus();
     } finally {
       setVerifying(false);
     }
@@ -403,25 +371,34 @@ export default function VerifyEmailScreen() {
 
           {timerChip}
 
-          <View style={s.codeRow}>
-            {digits.map((d, i) => (
-              <TextInput
-                key={i}
-                ref={(el) => {
-                  inputRefs.current[i] = el;
-                }}
-                style={[s.codeBox, d && s.codeBoxFilled]}
-                value={d}
-                onChangeText={(t) => handleDigitChange(t, i)}
-                onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, i)}
-                keyboardType="number-pad"
-                maxLength={CODE_LENGTH} // Paste
-                textAlign="center"
-                editable={!verifying && !expired}
-                autoFocus={i === 0}
-                selectionColor={colors.accent}
-              />
-            ))}
+          <View style={s.codeWrap}>
+            <View style={s.codeRow} pointerEvents="none">
+              {digits.map((d, i) => {
+                const active = codeFocused && i === Math.min(code.length, CODE_LENGTH - 1);
+                return (
+                  <View key={i} style={[s.codeBox, !!d && s.codeBoxFilled, active && s.codeBoxActive]}>
+                    <Text style={s.codeDigit}>{d}</Text>
+                  </View>
+                );
+              })}
+            </View>
+            <TextInput
+              ref={codeInputRef}
+              style={s.codeInput}
+              value={code}
+              onChangeText={handleCodeChange}
+              onFocus={() => setCodeFocused(true)}
+              onBlur={() => setCodeFocused(false)}
+              keyboardType="number-pad"
+              maxLength={CODE_LENGTH}
+              editable={!verifying && !expired}
+              autoFocus
+              caretHidden
+              selectionColor="transparent"
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
+              accessibilityLabel={`${CODE_LENGTH}-digit verification code`}
+            />
           </View>
 
           <Pressable
@@ -531,15 +508,24 @@ const makeStyles = (c: Colors) =>
       borderWidth: 1.5,
       borderColor: c.border,
       borderRadius: 12,
-      fontSize: 20,
-      fontWeight: "800",
-      color: c.textPrimary,
       backgroundColor: c.surface,
-      padding: 0,
-      textAlignVertical: "center",
-      includeFontPadding: false,
+      alignItems: "center",
+      justifyContent: "center",
     },
     codeBoxFilled: { borderColor: c.accent, backgroundColor: c.surfaceAlt },
+    codeBoxActive: { borderColor: c.accent, borderWidth: 2.5 },
+    codeWrap: { position: "relative" },
+    codeDigit: { fontSize: 22, fontWeight: "800", color: c.textPrimary, textAlign: "center" },
+    codeInput: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      color: "transparent",
+      backgroundColor: "transparent",
+      fontSize: 22,
+    },
     verifyBtn: {
       backgroundColor: c.accent,
       width: "100%",
