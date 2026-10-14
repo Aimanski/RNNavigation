@@ -137,7 +137,7 @@ export default function SettingScreen() {
           <View style={s.darkModeTextWrap}>
             <Text style={s.darkModeTitle}>Dark Mode</Text>
             <Text style={s.darkModeSub}>
-              {isDark ? "On — using the dark theme" : "Off — using the light theme"}
+              {isDark ? "On, using the dark theme" : "Off, using the light theme"}
             </Text>
           </View>
           <Switch

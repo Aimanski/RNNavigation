@@ -194,7 +194,7 @@ export default function ChatbotScreen() {
   };
 
   const hint = limitReached
-    ? "Daily limit reached — come back tomorrow."
+    ? "Daily limit reached. Come back tomorrow."
     : remaining !== null
       ? `${remaining}${limit ? ` of ${limit}` : ""} message${remaining === 1 ? "" : "s"} left today`
       : "Not medical advice";

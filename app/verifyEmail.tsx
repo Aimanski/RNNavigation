@@ -308,8 +308,8 @@ export default function VerifyEmailScreen() {
         <Text style={[s.timerText, expired && s.timerTextExpired]}>
           {expired
             ? isLinkMode
-              ? "This link has expired — please sign in again."
-              : "This code has expired — please sign up again."
+              ? "This link has expired. Please sign in again."
+              : "This code has expired. Please sign up again."
             : isLinkMode
               ? `Verify within ${formatMMSS(secondsLeft)} or you'll need to sign in again`
               : `Verify within ${formatMMSS(secondsLeft)} or you'll need to sign up again`}
@@ -337,7 +337,7 @@ export default function VerifyEmailScreen() {
           <Text style={s.subtitle}>
             We sent a verification link to{"\n"}
             <Text style={s.emailText}>{email || "your email"}</Text>
-            {"\n\n"}Open it on this device to continue — this screen will
+            {"\n\n"}Open it on this device to continue. This screen will
             move on automatically once you do.
           </Text>
 
@@ -356,7 +356,7 @@ export default function VerifyEmailScreen() {
             {checking ? (
               <ActivityIndicator color={colors.onAccent} size="small" />
             ) : (
-              <Text style={s.verifyText}>{"I've verified — continue"}</Text>
+              <Text style={s.verifyText}>{"I've verified, continue"}</Text>
             )}
           </Pressable>
 

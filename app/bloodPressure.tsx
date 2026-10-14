@@ -78,7 +78,7 @@ function getBPRemark(systolic: number, diastolic: number): BPRemark {
     };
   } else {
     return {
-      category: "Hypertensive Crisis — Seek Help Immediately",
+      category: "Hypertensive Crisis: Seek Help Immediately",
       color: "#7f1d1d",
       suggestion:
         "This is a hypertensive crisis. Please seek emergency medical attention immediately. Do not delay. Rest in a calm environment and avoid any physical exertion until help arrives.",

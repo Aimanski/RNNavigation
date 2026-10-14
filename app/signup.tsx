@@ -121,7 +121,7 @@ export default function SignUpScreen() {
         return;
       }
 
-      throw new Error("Could not establish session — please try again.");
+      throw new Error("Could not establish session. Please try again.");
     } catch (err: any) {
       Alert.alert(
         "Google Sign-In Failed",

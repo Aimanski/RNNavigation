@@ -248,7 +248,7 @@ export default function DashboardScreen() {
           </View>
           <Text style={[s.barPct, { color: isOver ? "#ef4444" : colors.textSecondary }]}>
             {isOver
-              ? `${Math.round(progress)}% — daily goal exceeded`
+              ? `${Math.round(progress)}%, daily goal exceeded`
               : `${Math.round(progress)}% of daily goal`}
           </Text>
         </View>

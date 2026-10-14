@@ -60,9 +60,9 @@ const getBPLabel = (systolic: number, diastolic: number): { label: string; color
   if (systolic < 90 || diastolic < 60) return { label: "Low", color: "#6366f1" };
   if (systolic < 120 && diastolic < 80) return { label: "Normal", color: "#10b981" };
   if (systolic < 130 && diastolic < 80) return { label: "Elevated", color: "#eab308" };
-  if (systolic < 140 || diastolic < 90) return { label: "High — Stage 1", color: "#f97316" };
-  if (systolic < 180 || diastolic < 120) return { label: "High — Stage 2", color: "#ef4444" };
-  return { label: "Crisis — seek help", color: "#7f1d1d" };
+  if (systolic < 140 || diastolic < 90) return { label: "High (Stage 1)", color: "#f97316" };
+  if (systolic < 180 || diastolic < 120) return { label: "High (Stage 2)", color: "#ef4444" };
+  return { label: "Crisis: seek help", color: "#7f1d1d" };
 };
 
 const formatHours = (hours: number): string => {
@@ -541,7 +541,7 @@ export default function MainScreen() {
               {!statsLoaded
                 ? "Loading your day…"
                 : stats.calories === 0
-                  ? "Nothing logged yet — add your first meal"
+                  ? "Nothing logged yet. Add your first meal"
                   : isOver
                     ? `${Math.abs(remaining).toLocaleString()} kcal over your goal`
                     : `${remaining.toLocaleString()} kcal left today`}

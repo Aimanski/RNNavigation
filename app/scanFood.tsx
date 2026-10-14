@@ -162,7 +162,7 @@ export default function ScanFoodScreen() {
         fatPer100g: Math.round((result.fat || 0) * scale * 10) / 10,
         defaultGrams: estimatedGrams,
         confidenceNote: `AI estimate (${result.confidence || "medium"} confidence)${
-          result.reason ? ` — ${result.reason}` : ""
+          result.reason ? `: ${result.reason}` : ""
         }`,
       });
       setGrams(String(estimatedGrams));

@@ -115,7 +115,7 @@ export default function PreferencesScreen() {
     ? "Save preferences"
     : count > 0
       ? `Continue with ${count} ${count === 1 ? "allergy" : "allergies"}`
-      : "I have no allergies — continue";
+      : "I have no allergies, continue";
 
   return (
     <SafeAreaView style={s.safeArea} edges={["left", "right", "bottom"]}>

@@ -538,7 +538,7 @@ export default function AdminScreen() {
         "✨ AI auto-fill done",
         `Filled nutrition (per 100 g) and ${aiIngredients.length} ingredients for "${result.name || foodForm.name}".\n\nConfidence: ${result.confidence || "medium"}${
           result.reason ? `\n${result.reason}` : ""
-        }\n\nAI can make mistakes — please review the values before saving.`
+        }\n\nAI can make mistakes. Please review the values before saving.`
       );
     } catch (e: any) {
       Alert.alert("Auto-fill failed", e.message || "Could not generate the nutrition info. Please try again.");
@@ -1258,7 +1258,7 @@ export default function AdminScreen() {
                     <Text style={s.resetBig}>{cycleEnded ? "Resetting…" : `Resets in ${formatCountdown(resetMs ?? 0)}`}</Text>
                     <Text style={s.resetSub}>
                       24-hour cycle: {clockLabel(aiQuota.window_start)} → {resetClock} (Philippine time). Counters
-                      go back to 0 when it ends — Google resets daily quotas at midnight Pacific.
+                      go back to 0 when it ends. Google resets daily quotas at midnight Pacific.
                     </Text>
                   </View>
                 ) : null}
@@ -1286,7 +1286,7 @@ export default function AdminScreen() {
                           </Text>
                         </>
                       ) : (
-                        <Text style={s.quotaLeft}>No limit set — tap &quot;Set limits&quot; to see what&apos;s left.</Text>
+                        <Text style={s.quotaLeft}>No limit set. Tap &quot;Set limits&quot; to see what&apos;s left.</Text>
                       )}
                     </View>
                   );
@@ -1709,7 +1709,7 @@ export default function AdminScreen() {
                 keyboardType="numeric"
               />
               <Text style={s.quotaFormHelp}>
-                Gemini&apos;s free tier has no fixed daily token pool, so the token budget is your own cap — useful
+                Gemini&apos;s free tier has no fixed daily token pool, so the token budget is your own cap, useful
                 if you want an early warning before costs or per-minute limits become a problem.
               </Text>
             </ScrollView>

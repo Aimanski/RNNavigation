@@ -126,7 +126,7 @@ export default function HomeScreen() {
         return;
       }
 
-      throw new Error("Could not establish session — please try again.");
+      throw new Error("Could not establish session. Please try again.");
     } catch (err: any) {
       Alert.alert("Google Sign-In Failed", err.message || "Something went wrong.");
     } finally {
@@ -159,7 +159,7 @@ export default function HomeScreen() {
           if (isGoogleUser) {
             Alert.alert(
               "Try Google Sign-In 🔑",
-              `It looks like "${email.trim()}" was registered using Google.\n\nGoogle accounts don't have a password — please tap "Continue with Google" to log in.`,
+              `It looks like "${email.trim()}" was registered using Google.\n\nGoogle accounts don't have a password. Please tap "Continue with Google" to log in.`,
               [
                 { text: "Cancel", style: "cancel" },
                 { text: "Continue with Google", onPress: handleGoogleSignIn },
