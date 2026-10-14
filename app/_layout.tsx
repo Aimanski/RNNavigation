@@ -17,13 +17,7 @@ if (__DEV__) LogBox.ignoreLogs(["Unable to activate keep awake"]);
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Header
-const HEADER_PAGES: Record<string, string> = {
-  "/dashboard": "Weight",
-  "/mealplan": "Meals",
-  "/main": "Home",
-  "/sleep": "Sleep",
-  "/chatbot": "Weep",
-};
+const HEADER_SCREENS = ["dashboard", "mealplan", "main", "sleep", "chatbot"];
 
 // Footer
 const FOOTER_PAGES = new Set([
@@ -96,14 +90,12 @@ function useAndroidBack() {
 function AppShell() {
   const pathname = usePathname();
   const { colors } = useTheme();
-  const pageName = HEADER_PAGES[pathname];
   const showFooter = FOOTER_PAGES.has(pathname);
   useAndroidBack();
 
   // Theme
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {pageName && <AppHeader />}
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Stack
           screenOptions={{
@@ -111,7 +103,15 @@ function AppShell() {
             animation: "none",
             contentStyle: { backgroundColor: colors.background },
           }}
-        />
+        >
+          {HEADER_SCREENS.map((name) => (
+            <Stack.Screen
+              key={name}
+              name={name}
+              options={{ headerShown: true, header: () => <AppHeader /> }}
+            />
+          ))}
+        </Stack>
         {showFooter && <BottomNav />}
       </View>
     </View>
