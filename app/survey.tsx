@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { Text, TextInput } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import StepProgress from "../components/ui/StepProgress";
 import { supabase } from "../lib/supabase";
 import { getSessionUser } from "../lib/auth/session";
@@ -207,7 +207,7 @@ export default function SurveyScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         behavior="padding"
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
         style={s.container}
@@ -314,7 +314,7 @@ export default function SurveyScreen() {
             <Ionicons name="arrow-forward" size={20} color={colors.onAccent} />
           </Pressable>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </TouchableWithoutFeedback>
   );
 }

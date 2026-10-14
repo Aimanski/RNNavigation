@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -17,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import AuthField from "../components/ui/AuthField";
 import BrandLogo from "../components/brand/BrandLogo";
 import GoogleButton from "../components/ui/GoogleButton";
@@ -209,7 +209,7 @@ export default function HomeScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView behavior="padding" style={s.container}>
+      <KeyboardSafeView behavior="padding" style={s.container}>
         <ScrollView
           contentContainerStyle={s.content}
           keyboardShouldPersistTaps="handled"
@@ -269,7 +269,7 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </TouchableWithoutFeedback>
   );
 }

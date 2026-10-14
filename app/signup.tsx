@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -18,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import AuthField from "../components/ui/AuthField";
 import BrandLogo from "../components/brand/BrandLogo";
 import GoogleButton from "../components/ui/GoogleButton";
@@ -248,7 +248,7 @@ export default function SignUpScreen() {
   // Layout
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         behavior="padding"
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
         style={s.container}
@@ -351,7 +351,7 @@ export default function SignUpScreen() {
             </Text>
           </Pressable>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </TouchableWithoutFeedback>
   );
 }

@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { Text, TextInput } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import { ensureProfileExists } from "../lib/auth/ensureProfileExists";
 import { navigateAfterLogin } from "../lib/auth/navigateAfterLogin";
 import { resetTo } from "../lib/navigation";
@@ -390,7 +390,7 @@ export default function VerifyEmailScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView behavior="padding" style={s.container}>
+      <KeyboardSafeView behavior="padding" style={s.container}>
         <View style={s.content}>
           <View style={s.iconWrap}>
             <Ionicons name="mail-open-outline" size={38} color={colors.accent} />
@@ -459,7 +459,7 @@ export default function VerifyEmailScreen() {
             <Text style={s.backText}>Wrong email? Start over</Text>
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </TouchableWithoutFeedback>
   );
 }

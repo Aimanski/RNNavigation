@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { Text, TextInput } from "../components/ui/AppText";
+import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GOAL_LABEL, GOAL_OFFSET, recalc, recommendedGoalForBmi, type Energy } from "../lib/health/energy";
 import { goBackOr } from "../lib/navigation";
@@ -213,7 +213,7 @@ export default function UpdateInfoScreen() {
 
         </View>
 
-        <KeyboardAvoidingView
+        <KeyboardSafeView
           behavior="padding"
           keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
           style={s.flex}
@@ -325,7 +325,7 @@ export default function UpdateInfoScreen() {
               <Text style={s.btnTxt}>Update</Text>
             </Pressable>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardSafeView>
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
