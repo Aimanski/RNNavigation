@@ -32,7 +32,6 @@ const FOOTER_PAGES = new Set([
   "/main",
   "/sleep",
   "/chatbot",
-  "/setting",
 ]);
 
 // Back
@@ -55,6 +54,12 @@ function useAndroidBack() {
     let lastBackPress = 0;
 
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      // Settings
+      if (pathname === "/setting") {
+        router.replace("/main");
+        return true;
+      }
+
       // Wizard
       const previousStep = SETUP_PREVIOUS_STEP[pathname];
       if (previousStep && !(pathname === "/preferences" && mode === "edit")) {

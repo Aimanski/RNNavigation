@@ -109,6 +109,15 @@ export default function SettingScreen() {
     <View style={s.container}>
       {/* Header */}
       <View style={s.fixedHeader}>
+        <Pressable
+          style={s.backBtn}
+          onPress={() => router.replace("/main")}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Home"
+        >
+          <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
+        </Pressable>
         <Text style={s.header}>Settings</Text>
       </View>
 
@@ -165,7 +174,7 @@ export default function SettingScreen() {
           )}
         </Pressable>
 
-        <View style={{ height: 170 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
     </View>
   );
@@ -178,10 +187,19 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.background,
     },
     fixedHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
       paddingTop: 56,
-      paddingHorizontal: 24,
+      paddingHorizontal: 16,
       backgroundColor: c.background,
       paddingBottom: 12,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      alignItems: "center",
+      justifyContent: "center",
     },
     header: {
       fontSize: 32,
