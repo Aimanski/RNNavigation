@@ -14,6 +14,7 @@ import {
 import { Text } from "../components/ui/AppText";
 import { markPageReady } from "../lib/auth/startup";
 import { Calendar } from "react-native-calendars";
+import { fontFamilyFor } from "../lib/typography";
 import Svg, { Circle } from "react-native-svg";
 import TutorialModal from "../components/ui/TutorialModal";
 import { cache } from "../lib/cache";
@@ -614,9 +615,12 @@ export default function MainScreen() {
               monthTextColor: colors.textPrimary,
               indicatorColor: colors.accent,
               arrowColor: colors.accent,
-              textDayFontWeight: "600",
-              textMonthFontWeight: "800",
-              textDayHeaderFontWeight: "700",
+              textDayFontFamily: fontFamilyFor("600"),
+              textMonthFontFamily: fontFamilyFor("800"),
+              textDayHeaderFontFamily: fontFamilyFor("700"),
+              textDayFontWeight: "normal",
+              textMonthFontWeight: "normal",
+              textDayHeaderFontWeight: "normal",
             }}
             hideExtraDays
             disableMonthChange
