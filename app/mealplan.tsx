@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import PlanTeaser from "../components/meals/PlanTeaser";
-import { SUGGEST_GREEN, suggestTint } from "../components/meals/palette";
+import { SUGGEST_GREEN } from "../components/meals/palette";
 import { Text, TextInput } from "../components/ui/AppText";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fetchAllergies, findAllergens, ingredientNames } from "../lib/health/allergies";
@@ -109,14 +109,12 @@ const FoodCube = ({
     <View style={[StyleSheet.absoluteFill, s.cubeOverlay]} />
     {!!allergens?.length && (
       <View style={s.allergenBadge}>
-        <Ionicons name="warning" size={12} color="#ffffff" />
-        <Text style={s.allergenBadgeText}>Allergen</Text>
+        <Ionicons name="warning" size={15} color="#ffffff" />
       </View>
     )}
     {!!suggested && !allergens?.length && (
       <View style={s.suggestBadge}>
-        <Ionicons name="sparkles" size={12} color="#ffffff" />
-        <Text style={s.allergenBadgeText}>Suggested</Text>
+        <Ionicons name="star" size={15} color="#ffffff" />
       </View>
     )}
     <View style={s.cubeChevron}>
@@ -515,16 +513,6 @@ export default function MealplanScreen() {
           </View>
         </View>
 
-        {Object.keys(warnings).length > 0 && (
-          <View style={s.allergyNotice}>
-            <Ionicons name="warning" size={18} color={DANGER_COLOR} />
-            <Text style={s.allergyNoticeText}>
-              Foods marked <Text style={s.allergyNoticeBold}>Allergen</Text> contain an ingredient
-              you&apos;re allergic to.
-            </Text>
-          </View>
-        )}
-
         {/* Suggested */}
         <PlanTeaser
           plan={plan}
@@ -534,12 +522,26 @@ export default function MealplanScreen() {
           onOpen={() => router.push("/myplan")}
         />
 
-        {!!plan && (
-          <View style={s.suggestNotice}>
-            <Ionicons name="sparkles" size={18} color={SUGGEST_GREEN} />
-            <Text style={s.allergyNoticeText}>
-              Foods marked <Text style={s.suggestNoticeBold}>Suggested</Text> are part of your weekly plan.
-            </Text>
+        {/* Legend */}
+        {(Object.keys(warnings).length > 0 || !!plan) && (
+          <View style={s.legend}>
+            {Object.keys(warnings).length > 0 && (
+              <View style={s.legendItem}>
+                <View style={[s.legendIcon, { backgroundColor: DANGER_COLOR }]}>
+                  <Ionicons name="warning" size={14} color="#ffffff" />
+                </View>
+                <Text style={s.legendText}>Allergen</Text>
+              </View>
+            )}
+            {Object.keys(warnings).length > 0 && !!plan && <View style={s.legendDivider} />}
+            {!!plan && (
+              <View style={s.legendItem}>
+                <View style={[s.legendIcon, { backgroundColor: SUGGEST_GREEN }]}>
+                  <Ionicons name="star" size={14} color="#ffffff" />
+                </View>
+                <Text style={s.legendText}>Suggested</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -810,54 +812,41 @@ const makeStyles = (c: Colors, isDark: boolean) => {
       position: "absolute",
       top: 10,
       left: 10,
-      flexDirection: "row",
+      width: 28,
+      height: 28,
       alignItems: "center",
-      gap: 4,
+      justifyContent: "center",
       backgroundColor: SUGGEST_GREEN,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 999,
+      borderRadius: 14,
     },
-    suggestNotice: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      backgroundColor: suggestTint(isDark),
-      borderWidth: 1.5,
-      borderColor: SUGGEST_GREEN,
-      borderRadius: 16,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      marginBottom: 14,
-    },
-    suggestNoticeBold: { fontWeight: "800", color: SUGGEST_GREEN },
     allergenBadge: {
       position: "absolute",
       top: 10,
       left: 10,
-      flexDirection: "row",
+      width: 28,
+      height: 28,
       alignItems: "center",
-      gap: 4,
+      justifyContent: "center",
       backgroundColor: DANGER_COLOR,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 999,
+      borderRadius: 14,
     },
-    allergenBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
-    allergyNotice: {
+    legend: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      justifyContent: "center",
+      gap: 14,
       backgroundColor: c.surface,
       borderWidth: 1.5,
-      borderColor: DANGER_COLOR,
+      borderColor: c.border,
       borderRadius: 16,
-      paddingVertical: 12,
+      paddingVertical: 10,
       paddingHorizontal: 14,
       marginBottom: 14,
     },
-    allergyNoticeText: { flex: 1, fontSize: 13.5, fontWeight: "600", color: c.textSecondary, lineHeight: 19 },
-    allergyNoticeBold: { fontWeight: "800", color: DANGER_COLOR },
+    legendItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+    legendIcon: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+    legendText: { fontSize: 14, fontWeight: "800", color: c.textPrimary },
+    legendDivider: { width: 1.5, height: 20, backgroundColor: c.border },
 
     // Pager
     pager: {
