@@ -525,6 +525,7 @@ const makeStyles = (c: Colors) =>
       color: "transparent",
       backgroundColor: "transparent",
       fontSize: 22,
+      opacity: 0.01,
     },
     verifyBtn: {
       backgroundColor: c.accent,
