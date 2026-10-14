@@ -98,7 +98,7 @@ function AppShell() {
   // Theme
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {pageName && <AppHeader pageName={pageName} />}
+      {pageName && <AppHeader />}
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Stack
           screenOptions={{

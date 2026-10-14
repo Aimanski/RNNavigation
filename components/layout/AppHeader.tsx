@@ -13,7 +13,7 @@ import { Colors, useTheme } from "../../providers/ThemeProvider";
 
 const AVATAR_CACHE_KEY = "header:avatar";
 
-export default function AppHeader({ pageName }: { pageName: string }) {
+export default function AppHeader() {
   const { colors } = useTheme();
   const router = useRouter();
   const s = useMemo(() => makeStyles(colors), [colors]);
@@ -51,9 +51,6 @@ export default function AppHeader({ pageName }: { pageName: string }) {
           </Text>
         </View>
       </View>
-      <Text style={s.pageName} numberOfLines={1}>
-        {pageName}
-      </Text>
       <View style={[s.sideWrap, s.sideWrapRight]}>
         {/* Navigation */}
         <Pressable
@@ -95,13 +92,6 @@ const makeStyles = (c: Colors) =>
       fontWeight: "900",
       color: c.accent,
       letterSpacing: -0.3,
-    },
-    pageName: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 15,
-      fontWeight: "700",
-      color: c.textPrimary,
     },
     avatarBtn: {
       width: 34,
