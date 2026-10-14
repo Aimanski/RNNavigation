@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,14 +14,13 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import SuggestedPlan from "../components/meals/SuggestedPlan";
+import PlanTeaser from "../components/meals/PlanTeaser";
 import { SUGGEST_GREEN, suggestTint } from "../components/meals/palette";
 import { Text, TextInput } from "../components/ui/AppText";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fetchAllergies, findAllergens, ingredientNames } from "../lib/health/allergies";
-import { generateWeekPlan, PlanFood, PlanItem, todayPH, weekStartPH } from "../lib/health/mealPlan";
-import { hasAnyTaste, useTastes } from "../lib/health/tastes";
+import { Food, fetchFoods, MEALS_CACHE_KEY, MealSnapshot } from "../lib/health/mealData";
+import { useMealPlan } from "../lib/health/useMealPlan";
 import { cache } from "../lib/cache";
 import { getSessionUser } from "../lib/auth/session";
 import { supabase } from "../lib/supabase";
@@ -57,56 +56,8 @@ type MealType = "breakfast" | "lunch" | "dinner";
 type SectionKey = MealType | "scanned";
 type IconName = keyof typeof Ionicons.glyphMap;
 
-type Food = {
-  id: string;
-  name: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  meal_type: string;
-  image_url: string;
-  // Serving
-  serving_g?: number | null;
-  ingredients?: unknown;
-  // Ownership
-  user_id?: string | null;
-  created_at?: string;
-};
-
-type MealSnapshot = {
-  foods: Food[];
-  userId: string;
-  goalCalories: number | null;
-  total: number;
-  // Allergens
-  warnings: Record<string, string[]>;
-};
-
-const MEALS_CACHE_KEY = "meals:snapshot";
-
 // Danger
 const DANGER_COLOR = "#ef4444";
-
-// Columns
-const FOOD_COLUMNS = "id, name, calories, protein, carbs, fat, meal_type, image_url, created_at";
-
-// Fallback
-const COLUMN_SETS = [
-  `${FOOD_COLUMNS}, ingredients, serving_g, user_id`,
-  `${FOOD_COLUMNS}, ingredients, user_id`,
-  FOOD_COLUMNS,
-];
-
-const fetchFoods = async () => {
-  let last: { data: Food[] | null; error: { message?: string } | null } = { data: null, error: null };
-  for (const columns of COLUMN_SETS) {
-    const res = await supabase.from("foods").select(columns).order("name", { ascending: true });
-    last = { data: res.data as unknown as Food[] | null, error: res.error };
-    if (!res.error) return last;
-  }
-  return last;
-};
 
 const MEAL_SECTIONS: { key: MealType; title: string; icon: IconName }[] = [
   { key: "breakfast", title: "Breakfast", icon: "sunny" },
@@ -361,27 +312,6 @@ export default function MealplanScreen() {
   });
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Plan
-  const { tastes, reload: reloadTastes } = useTastes();
-  const weekStart = useMemo(() => weekStartPH(), []);
-  const today = todayPH();
-  const [shuffle, setShuffle] = useState(0);
-  const [selectedDay, setSelectedDay] = useState(-1);
-
-  useEffect(() => {
-    AsyncStorage.getItem(`mealplan:shuffle:${weekStart}`)
-      .then((value) => {
-        if (value) setShuffle(parseInt(value, 10) || 0);
-      })
-      .catch(() => {});
-  }, [weekStart]);
-
-  const onShuffle = () => {
-    const next = shuffle + 1;
-    setShuffle(next);
-    AsyncStorage.setItem(`mealplan:shuffle:${weekStart}`, String(next)).catch(() => {});
-  };
-
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -394,7 +324,6 @@ export default function MealplanScreen() {
           if (!user) { router.replace("/"); return; }
           const uid = user.id;
           const todayStr = getTodayPHDateString();
-          reloadTastes();
 
           // Window
           const since = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
@@ -459,7 +388,7 @@ export default function MealplanScreen() {
       return () => {
         active = false;
       };
-    }, [router, reloadTastes])
+    }, [router])
   );
 
   const goToFoodDetail = (food: Food) => {
@@ -502,48 +431,19 @@ export default function MealplanScreen() {
   };
 
   // Suggested
-  const plan = useMemo(() => {
-    if (!goalCalories || catalogFoods.length === 0) return null;
-    const result = generateWeekPlan({
-      foods: catalogFoods as PlanFood[],
-      goal: goalCalories,
-      prefs: tastes ?? {},
-      blocked: new Set(Object.keys(warnings)),
-      weekStart,
-      seed: `${userId ?? "guest"}:${shuffle}`,
-    });
-    return result.foodIds.size > 0 ? result : null;
-  }, [catalogFoods, goalCalories, tastes, warnings, weekStart, userId, shuffle]);
+  const { plan, todayIndex, reloadTastes } = useMealPlan({
+    foods,
+    goal: goalCalories,
+    warnings,
+    userId,
+  });
 
-  const todayIndex = plan ? plan.days.findIndex((d) => d.date === today) : -1;
-  const activeDay = selectedDay >= 0 ? selectedDay : Math.max(todayIndex, 0);
-
-  const goToPlanItem = (item: PlanItem) => {
-    const { food } = item;
-    const serving = food.serving_g && food.serving_g > 0 ? food.serving_g : 100;
-    router.push({
-      pathname: "/mealDetail",
-      params: {
-        name: food.name,
-        calories: food.calories.toString(),
-        protein: (food.protein || 0).toFixed(1),
-        carbs: (food.carbs || 0).toFixed(1),
-        fat: (food.fat || 0).toFixed(1),
-        servings: String(item.grams / serving),
-        portion: `${item.grams} g`,
-        items: JSON.stringify([{
-          id: food.id,
-          name: food.name,
-          calories: food.calories,
-          protein: food.protein,
-          carbs: food.carbs,
-          fat: food.fat,
-          desc: `${food.calories} kcal`,
-          image_url: food.image_url,
-        }]),
-      },
-    });
-  };
+  // Refresh
+  useFocusEffect(
+    useCallback(() => {
+      reloadTastes();
+    }, [reloadTastes])
+  );
 
   const query = searchQuery.trim().toLowerCase();
   const filteredFoods = useMemo(
@@ -626,18 +526,12 @@ export default function MealplanScreen() {
         )}
 
         {/* Suggested */}
-        <SuggestedPlan
+        <PlanTeaser
           plan={plan}
           goal={goalCalories}
           loading={initialLoading}
-          selectedDay={activeDay}
-          today={today}
-          hasTastes={hasAnyTaste(tastes)}
-          onSelectDay={setSelectedDay}
-          onShuffle={onShuffle}
-          onOpenItem={goToPlanItem}
-          onSetTastes={() => router.push({ pathname: "/tastes", params: { mode: "edit" } })}
-          onSetGoal={() => router.push("/updateInfo")}
+          todayIndex={todayIndex}
+          onOpen={() => router.push("/myplan")}
         />
 
         {!!plan && (
