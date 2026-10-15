@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -183,7 +182,7 @@ const makeStyles = (c: Colors) =>
     pressed: { opacity: 0.7 },
 
     headerContainer: {
-      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingTop: 12,
       paddingBottom: 16,
       paddingHorizontal: 20,
       backgroundColor: c.background,

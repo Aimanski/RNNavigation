@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -250,7 +249,7 @@ const makeStyles = (c: Colors) =>
       alignItems: "center",
     },
     topHeader: {
-      paddingTop: Platform.OS === "android" ? 60 : 64,
+      paddingTop: 22,
       paddingHorizontal: 24,
     },
     editHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center" },

@@ -3,13 +3,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Dimensions,
   Modal,
-  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./AppText";
 import Animated, {
   useAnimatedStyle,
@@ -21,7 +22,6 @@ import { supabase } from "../../lib/supabase";
 import { getSessionUser } from "../../lib/auth/session";
 import { Colors, useTheme } from "../../providers/ThemeProvider";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 // Slides
 type Slide = {
@@ -139,7 +139,13 @@ function SpringButton({
 // Modal
 export default function TutorialModal({ visible, onDismiss, onViewMealPlan }: Props) {
   const { colors } = useTheme();
-  const s = useMemo(() => makeStyles(colors), [colors]);
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const compact = screenH < 740;
+  const s = useMemo(
+    () => makeStyles(colors, screenW, compact, insets.top, insets.bottom),
+    [colors, screenW, compact, insets.top, insets.bottom]
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [saving,       setSaving]       = useState(false);
 
@@ -236,12 +242,17 @@ export default function TutorialModal({ visible, onDismiss, onViewMealPlan }: Pr
 
         {/* Card */}
         <Animated.View style={[s.card, cardAnimStyle]}>
-
+          <ScrollView
+            style={s.cardScroll}
+            contentContainerStyle={s.cardScrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
           {/* Icon */}
           <View style={[s.iconWrap, { backgroundColor: slide.iconBg }]}>
             <Ionicons
               name={slide.icon as any}
-              size={56}
+              size={compact ? 38 : 56}
               color={slide.iconColor}
             />
           </View>
@@ -255,7 +266,9 @@ export default function TutorialModal({ visible, onDismiss, onViewMealPlan }: Pr
           {/* Content */}
           <Text style={s.title}>{slide.title}</Text>
           <Text style={s.body}>{slide.body}</Text>
+          </ScrollView>
 
+          <View style={s.cardFooter}>
           {/* Pagination */}
           <View style={s.dotsRow}>
             {SLIDES.map((_, i) => (
@@ -324,6 +337,7 @@ export default function TutorialModal({ visible, onDismiss, onViewMealPlan }: Pr
           <Text style={s.counter}>
             {currentIndex + 1} of {SLIDES.length}
           </Text>
+          </View>
 
         </Animated.View>
       </Animated.View>
@@ -332,21 +346,22 @@ export default function TutorialModal({ visible, onDismiss, onViewMealPlan }: Pr
 }
 
 // Styles
-const CARD_W = Math.min(SCREEN_W - 40, 420);
 
-const makeStyles = (c: Colors) => StyleSheet.create({
+const makeStyles = (c: Colors, screenW: number, compact: boolean, topInset: number, bottomInset: number) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(4, 47, 46, 0.72)",
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
+    paddingTop: topInset + 64,
+    paddingBottom: bottomInset + 16,
   },
 
   // Skip
   skipBtn: {
     position: "absolute",
-    top: Platform.OS === "android" ? 50 : 56,
+    top: topInset + 12,
     right: 24,
     flexDirection: "row",
     alignItems: "center",
@@ -369,24 +384,29 @@ const makeStyles = (c: Colors) => StyleSheet.create({
 
   // Card
   card: {
-    width: CARD_W,
+    width: Math.min(screenW - 40, 420),
     backgroundColor: c.surface,
     borderRadius: 32,
-    padding: 32,
+    paddingHorizontal: compact ? 20 : 32,
+    paddingTop: compact ? 20 : 32,
+    paddingBottom: compact ? 16 : 28,
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: c.border,
-    maxHeight: SCREEN_H * 0.82,
+    maxHeight: "100%",
   },
+  cardScroll: { flexGrow: 0, flexShrink: 1, width: "100%" },
+  cardScrollContent: { alignItems: "center", paddingBottom: 8 },
+  cardFooter: { width: "100%", alignItems: "center", flexShrink: 0, paddingTop: 4 },
 
   // Icon
   iconWrap: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
+    width: compact ? 72 : 104,
+    height: compact ? 72 : 104,
+    borderRadius: compact ? 36 : 52,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: compact ? 12 : 20,
   },
 
   // Badge
@@ -413,22 +433,22 @@ const makeStyles = (c: Colors) => StyleSheet.create({
 
   // Typography
   title: {
-    fontSize: 22,
+    fontSize: compact ? 20 : 22,
     fontWeight: "900",
     color: c.textPrimary,
     textAlign: "center",
     marginBottom: 14,
     letterSpacing: -0.3,
-    lineHeight: 30,
+    lineHeight: compact ? 27 : 30,
   },
   body: {
-    fontSize: 15,
+    fontSize: compact ? 14 : 15,
     fontWeight: "400",
     color: c.textSecondary,
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: compact ? 21 : 24,
     paddingHorizontal: 4,
-    marginBottom: 28,
+    marginBottom: compact ? 12 : 20,
   },
 
   // Pagination
@@ -436,7 +456,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 28,
+    marginBottom: compact ? 14 : 24,
   },
   dot: {
     height: 8,

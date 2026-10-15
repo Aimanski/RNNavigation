@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Text } from "../components/ui/AppText";
@@ -20,8 +20,8 @@ import { supabase } from "../lib/supabase";
 import { getSessionUser } from "../lib/auth/session";
 import { Colors, useTheme } from "../providers/ThemeProvider";
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.36;
+// Hero
+const heroHeightFor = (screenHeight: number) => Math.min(Math.max(screenHeight * 0.36, 220), 380);
 
 // Macros
 const PROTEIN_COLOR = "#ef4444";
@@ -46,8 +46,10 @@ export default function MealDetailScreen() {
   const { name, calories, protein, carbs, fat, items, servings: servingsParam, portion } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const heroHeight = heroHeightFor(windowHeight);
   const { colors } = useTheme();
-  const s = useMemo(() => makeStyles(colors), [colors]);
+  const s = useMemo(() => makeStyles(colors, heroHeight, windowHeight), [colors, heroHeight, windowHeight]);
   const [adding, setAdding] = useState(false);
   // Portion
   const initialServings = (() => {
@@ -209,7 +211,7 @@ export default function MealDetailScreen() {
       {/* Foreground */}
       <ScrollView
         style={s.scrollView}
-        contentContainerStyle={{ paddingTop: HERO_HEIGHT - 28, paddingBottom: 130 + insets.bottom }}
+        contentContainerStyle={{ paddingTop: heroHeight - 28, paddingBottom: 130 + insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
         <View style={s.card}>
@@ -425,7 +427,7 @@ export default function MealDetailScreen() {
   );
 }
 
-const makeStyles = (c: Colors) =>
+const makeStyles = (c: Colors, heroHeight: number, windowHeight: number) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -433,7 +435,7 @@ const makeStyles = (c: Colors) =>
     },
     pressed: { opacity: 0.8 },
     heroContainer: {
-      height: HERO_HEIGHT,
+      height: heroHeight,
       width: "100%",
       position: "absolute",
       top: 0,
@@ -491,7 +493,7 @@ const makeStyles = (c: Colors) =>
       borderColor: c.border,
       paddingHorizontal: 20,
       paddingTop: 14,
-      minHeight: SCREEN_HEIGHT * 0.64,
+      minHeight: windowHeight * 0.64,
     },
     handle: {
       width: 44,

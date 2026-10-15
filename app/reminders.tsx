@@ -274,7 +274,7 @@ export default function RemindersScreen() {
         renderItem={({ item }) => (
           <View style={s.card}>
             <View style={s.cardInfo}>
-              <Text style={[s.time, !item.enabled && s.timeOff]}>
+              <Text style={[s.time, !item.enabled && s.timeOff]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                 {formatReminderTime(item.time)}
               </Text>
               <Text style={s.name} numberOfLines={2}>{item.name}</Text>
@@ -403,7 +403,7 @@ const makeStyles = (c: Colors) =>
     pressed: { opacity: 0.7 },
 
     headerContainer: {
-      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingTop: 12,
       paddingBottom: 16,
       paddingHorizontal: 20,
       backgroundColor: c.background,

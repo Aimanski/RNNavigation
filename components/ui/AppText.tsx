@@ -11,6 +11,9 @@ import { fontFamilyFor } from "../../lib/typography";
 
 const InsideText = createContext(false);
 
+// Accessibility
+const MAX_FONT_SCALE = 1.3;
+
 export const Text = forwardRef<RNText, TextProps>(function Text({ style, children, ...rest }, ref) {
   const nested = useContext(InsideText);
   const flat = StyleSheet.flatten(style) || {};
@@ -19,6 +22,7 @@ export const Text = forwardRef<RNText, TextProps>(function Text({ style, childre
   return (
     <RNText
       ref={ref}
+      maxFontSizeMultiplier={MAX_FONT_SCALE}
       {...rest}
       style={own ? [style, { fontFamily: fontFamilyFor(flat.fontWeight), fontWeight: "normal" }] : style}
     >
@@ -33,6 +37,7 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function TextIn
   return (
     <RNTextInput
       ref={ref}
+      maxFontSizeMultiplier={MAX_FONT_SCALE}
       {...rest}
       style={
         flat.fontFamily ? style : [style, { fontFamily: fontFamilyFor(flat.fontWeight), fontWeight: "normal" }]

@@ -207,7 +207,7 @@ export default function ChatbotScreen() {
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        onContentSizeChange={scrollToEnd}
+        onContentSizeChange={messages.length > 0 ? scrollToEnd : undefined}
       >
         {messages.length === 0 ? (
           <View style={s.welcome}>

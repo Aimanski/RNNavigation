@@ -324,7 +324,7 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.background },
     pressed: { opacity: 0.8 },
     scrollContent: {
-      paddingTop: Platform.OS === "android" ? 60 : 64,
+      paddingTop: 22,
       paddingBottom: 40,
       paddingHorizontal: 24,
     },

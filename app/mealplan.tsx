@@ -34,7 +34,7 @@ const PAGE_SIZE = 4;
 const GRID_PAD = 14;
 const GRID_GAP = 12;
 // Layout
-const DEFAULT_GRID_WIDTH = SCREEN_WIDTH - 20 * 2 - 3;
+const DEFAULT_GRID_WIDTH = Math.min(SCREEN_WIDTH, 640) - 20 * 2 - 3;
 
 const getPHDateString = (date: Date | string): string => {
   const d = new Date(date);
@@ -484,7 +484,7 @@ export default function MealplanScreen() {
                 <Text style={s.heroLabel}>{goalCalories ? "Calorie goal" : "Today's total"}</Text>
                 {loading && <ActivityIndicator size="small" color={colors.onAccent} />}
               </View>
-              <Text style={s.heroValue}>
+              <Text style={s.heroValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                 {(goalCalories ?? totalCaloriesToday).toLocaleString()}
                 <Text style={s.heroUnit}>{goalCalories ? " kcal a day" : " kcal"}</Text>
               </Text>

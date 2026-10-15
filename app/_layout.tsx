@@ -1,5 +1,7 @@
 // Layout
 import { Stack, useGlobalSearchParams, usePathname, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { BackHandler, LogBox, Platform, ToastAndroid, View } from "react-native";
@@ -18,6 +20,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Header
 const HEADER_SCREENS = ["dashboard", "mealplan", "main", "sleep", "chatbot"];
+
+// Layout
+const MAX_CONTENT_WIDTH = 640;
+const FULL_BLEED_PAGES = new Set(["/mealDetail", "/scanFood"]);
 
 // Footer
 const FOOTER_PAGES = new Set([
@@ -91,14 +97,29 @@ function useAndroidBack() {
 
 function AppShell() {
   const pathname = usePathname();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const showFooter = FOOTER_PAGES.has(pathname);
+  const fullBleed = FULL_BLEED_PAGES.has(pathname);
   useAndroidBack();
 
   // Theme
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <View
+        style={{
+          flex: 1,
+          width: "100%",
+          maxWidth: MAX_CONTENT_WIDTH,
+          alignSelf: "center",
+          backgroundColor: colors.background,
+          paddingTop: fullBleed ? 0 : insets.top,
+          paddingBottom: fullBleed || showFooter ? 0 : insets.bottom,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        }}
+      >
         <Stack
           screenOptions={{
             headerShown: false,

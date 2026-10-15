@@ -7,7 +7,6 @@ import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -249,7 +248,9 @@ export default function WaterScreen() {
                   />
                 </Svg>
                 <View style={s.progressTextOverlay}>
-                  <Text style={s.currentIntakeText}>{Math.round(todayIntake)}</Text>
+                  <Text style={s.currentIntakeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+                    {Math.round(todayIntake)}
+                  </Text>
                   <Text style={s.intakeUnit}>ml</Text>
                   <Text style={s.goalText}>of {WATER_GOAL_ML} ml</Text>
                 </View>
@@ -328,7 +329,7 @@ const makeStyles = (c: Colors) =>
     pressed: { opacity: 0.7 },
 
     headerContainer: {
-      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingTop: 12,
       paddingBottom: 16,
       paddingHorizontal: 20,
       backgroundColor: c.background,
@@ -401,6 +402,7 @@ const makeStyles = (c: Colors) =>
     progressTextOverlay: {
       position: "absolute",
       alignItems: "center",
+      width: 130,
     },
     currentIntakeText: {
       fontSize: 48,

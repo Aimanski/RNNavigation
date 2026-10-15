@@ -200,7 +200,7 @@ const makeStyles = (c: Colors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingTop: 56,
+      paddingTop: 18,
       paddingHorizontal: 16,
       backgroundColor: c.background,
       paddingBottom: 12,

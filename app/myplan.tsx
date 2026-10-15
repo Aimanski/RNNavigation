@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import SuggestedPlan from "../components/meals/SuggestedPlan";
 import { Text } from "../components/ui/AppText";
 import { planItemParams } from "../lib/health/mealData";
@@ -75,7 +75,7 @@ const makeStyles = (c: Colors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingTop: Platform.OS === "android" ? 56 : 60,
+      paddingTop: 18,
       paddingHorizontal: 16,
       paddingBottom: 12,
     },

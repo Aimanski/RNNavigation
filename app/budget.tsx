@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -225,7 +224,7 @@ const makeStyles = (c: Colors) =>
     safeArea: { flex: 1, backgroundColor: c.background },
     pressed: { opacity: 0.85 },
     loadingContainer: { flex: 1, backgroundColor: c.background, justifyContent: "center", alignItems: "center" },
-    topHeader: { paddingTop: Platform.OS === "android" ? 60 : 64, paddingHorizontal: 24 },
+    topHeader: { paddingTop: 22, paddingHorizontal: 24 },
     editHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     editHeaderTitle: { fontSize: 18, fontWeight: "800", color: c.textPrimary, textAlign: "center" },
     backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },

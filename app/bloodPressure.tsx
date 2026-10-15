@@ -9,7 +9,6 @@ import {
   FlatList,
   Keyboard,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   TouchableWithoutFeedback,
@@ -545,7 +544,7 @@ const makeStyles = (c: Colors) =>
     listLoading: { paddingVertical: 32, alignItems: "center", justifyContent: "center" },
 
     headerContainer: {
-      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingTop: 12,
       paddingBottom: 16,
       paddingHorizontal: 20,
       backgroundColor: c.background,
@@ -620,11 +619,14 @@ const makeStyles = (c: Colors) =>
       marginBottom: 20,
     },
     statusLabel: { fontSize: 13, fontWeight: "700", color: c.textSecondary, marginBottom: 8 },
-    statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+    statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", rowGap: 10 },
     statusValue: { fontSize: 30, fontWeight: "800", color: c.textPrimary },
     statusUnit: { fontSize: 14, fontWeight: "600", color: c.textMuted },
     statusChip: {
-      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 150,
+      minWidth: 150,
       flexDirection: "row",
       alignItems: "center",
       gap: 8,

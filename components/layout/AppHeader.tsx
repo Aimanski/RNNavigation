@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import BrandLogo from "../brand/BrandLogo";
 import { Text } from "../ui/AppText";
 import { fetchAvatarUrl } from "../../lib/avatar";
@@ -76,7 +76,7 @@ const makeStyles = (c: Colors) =>
     container: {
       flexDirection: "row",
       alignItems: "center",
-      paddingTop: Platform.OS === "android" ? 50 : 20,
+      paddingTop: 12,
       paddingBottom: 12,
       paddingHorizontal: 20,
       backgroundColor: c.background,
