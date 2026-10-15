@@ -20,7 +20,7 @@ export default function MyPlanScreen() {
 
   const inputs = usePlanInputs();
   const { refresh, loading } = inputs;
-  const { plan, today, activeDay, setSelectedDay, onShuffle, hasTastes, reloadTastes } = useMealPlan(inputs);
+  const { plan, today, activeDay, setSelectedDay, onShuffle, hasTastes, budget, reloadTastes } = useMealPlan(inputs);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,6 +55,8 @@ export default function MyPlanScreen() {
           selectedDay={activeDay}
           today={today}
           hasTastes={hasTastes}
+          budget={budget}
+          onEditBudget={() => router.push({ pathname: "/budget", params: { mode: "edit" } })}
           onSelectDay={setSelectedDay}
           onShuffle={onShuffle}
           onOpenItem={openItem}

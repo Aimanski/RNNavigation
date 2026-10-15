@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMemo } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "../ui/AppText";
+import { formatPeso } from "../../lib/health/budget";
 import { PlanDay, PlanItem, Slot, WeekPlan } from "../../lib/health/mealPlan";
 import { Colors, useTheme } from "../../providers/ThemeProvider";
 
@@ -32,6 +33,8 @@ export default function SuggestedPlan({
   selectedDay,
   today,
   hasTastes,
+  budget,
+  onEditBudget,
   onSelectDay,
   onShuffle,
   onOpenItem,
@@ -44,6 +47,8 @@ export default function SuggestedPlan({
   selectedDay: number;
   today: string;
   hasTastes: boolean;
+  budget: number | null;
+  onEditBudget: () => void;
   onSelectDay: (index: number) => void;
   onShuffle: () => void;
   onOpenItem: (item: PlanItem) => void;
@@ -113,6 +118,29 @@ export default function SuggestedPlan({
 
       {!!plan && !!day && (
         <>
+          <Pressable
+            style={({ pressed }) => [s.budgetChip, pressed && s.pressed]}
+            onPress={onEditBudget}
+            accessibilityRole="button"
+            accessibilityLabel="Change daily food budget"
+          >
+            <Ionicons name="wallet-outline" size={17} color={colors.accent} />
+            <Text style={s.budgetChipText}>
+              {budget ? `Budget ${formatPeso(budget)} a day` : "No budget set, tap to add one"}
+            </Text>
+            <Ionicons name="create-outline" size={17} color={colors.accent} />
+          </Pressable>
+
+          {plan.tooLow && (
+            <View style={s.warnBox}>
+              <Ionicons name="alert-circle" size={18} color="#d97706" />
+              <Text style={s.warnText}>
+                Your budget is lower than the cheapest plan for {plan.goal.toLocaleString()} kcal. These are the
+                lowest-cost meals we could find.
+              </Text>
+            </View>
+          )}
+
           {!hasTastes && (
             <Pressable style={({ pressed }) => [s.tasteBanner, pressed && s.pressed]} onPress={onSetTastes}>
               <Ionicons name="heart-outline" size={18} color={colors.accent} />
@@ -165,6 +193,10 @@ export default function SuggestedPlan({
               <Text style={s.dayMacros}>
                 Protein {sum(allItems, "protein")}g · Carbs {sum(allItems, "carbs")}g · Fat {sum(allItems, "fat")}g
               </Text>
+              <Text style={[s.dayCost, day.overBudget && s.dayCostOver]}>
+                Est. cost {formatPeso(day.cost)}
+                {budget ? ` of ${formatPeso(budget)}` : ""}
+              </Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
               <Text style={s.dayKcal}>{day.kcal.toLocaleString()}</Text>
@@ -203,7 +235,7 @@ export default function SuggestedPlan({
                       {item.food.name}
                     </Text>
                     <Text style={s.foodMeta}>
-                      {item.grams}g · {item.kcal} kcal
+                      {item.grams}g · {item.kcal} kcal · {formatPeso(item.cost)}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.accent} />
@@ -241,6 +273,27 @@ const makeStyles = (c: Colors) => {
     },
     title: { fontSize: 19, fontWeight: "800", color: c.textPrimary },
     subtitle: { fontSize: 13, fontWeight: "600", color: c.textSecondary, marginTop: 1 },
+    budgetChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: tint,
+      borderRadius: 14,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    budgetChipText: { flex: 1, fontSize: 13.5, fontWeight: "800", color: c.textPrimary },
+    warnBox: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      backgroundColor: "#fef3c7",
+      borderRadius: 14,
+      padding: 12,
+    },
+    warnText: { flex: 1, fontSize: 12.5, fontWeight: "700", color: "#92400e", lineHeight: 18 },
+    dayCost: { fontSize: 12.5, fontWeight: "800", color: c.accent, marginTop: 3 },
+    dayCostOver: { color: "#d97706" },
     shuffleBtn: {
       width: 38,
       height: 38,

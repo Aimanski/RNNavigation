@@ -5,11 +5,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { cache } from "../cache";
 import { Food, loadPlanInputs, MEALS_CACHE_KEY, MealSnapshot, PlanInputs } from "./mealData";
 import { generateWeekPlan, PlanFood, todayPH, weekStartPH } from "./mealPlan";
+import { useBudget } from "./budget";
 import { hasAnyTaste, useTastes } from "./tastes";
 
 /* Plan */
 export function useMealPlan({ foods, goal, warnings, userId }: PlanInputs) {
-  const { tastes, reload: reloadTastes } = useTastes();
+  const { tastes, reload: reloadTastesOnly } = useTastes();
+  const { budget, reload: reloadBudget } = useBudget();
+  const reloadTastes = useCallback(async () => {
+    await Promise.all([reloadTastesOnly(), reloadBudget()]);
+  }, [reloadTastesOnly, reloadBudget]);
   const weekStart = useMemo(() => weekStartPH(), []);
   const today = todayPH();
   const [shuffle, setShuffle] = useState(0);
@@ -37,12 +42,13 @@ export function useMealPlan({ foods, goal, warnings, userId }: PlanInputs) {
       foods: catalog as PlanFood[],
       goal,
       prefs: tastes ?? {},
+      budget,
       blocked: new Set(Object.keys(warnings)),
       weekStart,
       seed: `${userId ?? "guest"}:${shuffle}`,
     });
     return result.foodIds.size > 0 ? result : null;
-  }, [catalog, goal, tastes, warnings, weekStart, userId, shuffle]);
+  }, [catalog, goal, tastes, budget, warnings, weekStart, userId, shuffle]);
 
   const todayIndex = plan ? plan.days.findIndex((d) => d.date === today) : -1;
   const activeDay = selectedDay >= 0 ? selectedDay : Math.max(todayIndex, 0);
@@ -55,6 +61,8 @@ export function useMealPlan({ foods, goal, warnings, userId }: PlanInputs) {
     setSelectedDay,
     onShuffle,
     hasTastes: hasAnyTaste(tastes),
+    budget: budget && budget > 0 ? budget : null,
+    budgetSet: budget !== null,
     reloadTastes,
   };
 }

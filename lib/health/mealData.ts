@@ -16,6 +16,7 @@ export type Food = {
   image_url: string;
   // Serving
   serving_g?: number | null;
+  price_php?: number | null;
   ingredients?: unknown;
   // Ownership
   user_id?: string | null;
@@ -38,6 +39,7 @@ const FOOD_COLUMNS = "id, name, calories, protein, carbs, fat, meal_type, image_
 
 // Fallback
 const COLUMN_SETS = [
+  `${FOOD_COLUMNS}, ingredients, serving_g, price_php, user_id`,
   `${FOOD_COLUMNS}, ingredients, serving_g, user_id`,
   `${FOOD_COLUMNS}, ingredients, user_id`,
   FOOD_COLUMNS,

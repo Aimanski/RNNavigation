@@ -81,14 +81,14 @@ export default function TastesScreen() {
       });
       await saveTastes(userId, final);
       if (isEdit) goBackOr(router, "/setting");
-      else resetTo(router, "/main");
+      else resetTo(router, "/budget");
     } catch (err: any) {
       Alert.alert(
         "Couldn't save",
         err?.message || "Something went wrong. Please try again.",
         isEdit
           ? [{ text: "OK" }]
-          : [{ text: "Try again" }, { text: "Skip for now", onPress: () => resetTo(router, "/main") }]
+          : [{ text: "Try again" }, { text: "Skip for now", onPress: () => resetTo(router, "/budget") }]
       );
     } finally {
       setSaving(false);
@@ -207,8 +207,8 @@ export default function TastesScreen() {
             <ActivityIndicator color={colors.onAccent} />
           ) : (
             <>
-              <Text style={s.ctaText}>{isEdit ? "Save preferences" : "Build my meal plan"}</Text>
-              <Ionicons name={isEdit ? "checkmark" : "sparkles"} size={20} color={colors.onAccent} />
+              <Text style={s.ctaText}>{isEdit ? "Save preferences" : "Next"}</Text>
+              <Ionicons name={isEdit ? "checkmark" : "arrow-forward"} size={20} color={colors.onAccent} />
             </>
           )}
         </Pressable>

@@ -35,6 +35,7 @@ const SETUP_PREVIOUS_STEP: Record<string, string> = {
   "/recommend": "/activity",
   "/preferences": "/recommend",
   "/tastes": "/preferences",
+  "/budget": "/tastes",
 };
 const EXIT_SCREENS = new Set(["/", "/main", "/admin", "/survey", "/verifyEmail"]);
 const EXIT_PRESS_WINDOW_MS = 2000;
@@ -57,7 +58,7 @@ function useAndroidBack() {
 
       // Wizard
       const previousStep = SETUP_PREVIOUS_STEP[pathname];
-      if (previousStep && !((pathname === "/preferences" || pathname === "/tastes") && mode === "edit")) {
+      if (previousStep && !((pathname === "/preferences" || pathname === "/tastes" || pathname === "/budget") && mode === "edit")) {
         resetTo(router, previousStep as never);
         return true;
       }

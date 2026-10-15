@@ -59,6 +59,8 @@ type Food = {
   fat: number;
   meal_type: string;
   image_url: string;
+  serving_g?: number | null;
+  price_php?: number | null;
   ingredients?: Ingredient[];
 };
 
@@ -96,6 +98,8 @@ const EMPTY_FOOD = {
   fat: "",
   meal_type: "all",
   image_url: "",
+  serving_g: "",
+  price_php: "",
 };
 
 const EMPTY_USER_EDIT = {
@@ -661,6 +665,8 @@ export default function AdminScreen() {
       fat: food.fat.toString(),
       meal_type: food.meal_type,
       image_url: food.image_url || "",
+      serving_g: food.serving_g ? String(food.serving_g) : "",
+      price_php: food.price_php ? String(food.price_php) : "",
     });
     setIngredients(food.ingredients ? food.ingredients : []);
     setBaseNutrition(null);
@@ -690,6 +696,8 @@ export default function AdminScreen() {
         meal_type: foodForm.meal_type,
         image_url: foodForm.image_url.trim(),
         ingredients: ingredients.length > 0 ? ingredients : undefined,
+        serving_g: parseFloat(foodForm.serving_g) > 0 ? parseFloat(foodForm.serving_g) : 100,
+        price_php: parseFloat(foodForm.price_php) > 0 ? parseFloat(foodForm.price_php) : null,
       };
       if (editingFood) {
         const { error } = await supabase.from("foods").update(payload).eq("id", editingFood.id);
@@ -1557,6 +1565,14 @@ export default function AdminScreen() {
               )}
 
               <Field s={s} colors={colors} label="Calories (kcal)" placeholder="Calories *" value={foodForm.calories} onChangeText={(v) => setFoodForm((p) => ({ ...p, calories: v }))} keyboardType="numeric" />
+              <View style={s.threeCol}>
+                <View style={{ flex: 1 }}>
+                  <Field s={s} colors={colors} label="Serving size (g)" placeholder="100" value={foodForm.serving_g} onChangeText={(v) => setFoodForm((p) => ({ ...p, serving_g: v }))} keyboardType="numeric" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field s={s} colors={colors} label="Price per serving (₱)" placeholder="Optional" value={foodForm.price_php} onChangeText={(v) => setFoodForm((p) => ({ ...p, price_php: v }))} keyboardType="numeric" />
+                </View>
+              </View>
               <View style={s.threeCol}>
                 <View style={{ flex: 1 }}>
                   <Field s={s} colors={colors} label="Protein (g)" placeholder="0" value={foodForm.protein} onChangeText={(v) => setFoodForm((p) => ({ ...p, protein: v }))} keyboardType="numeric" />

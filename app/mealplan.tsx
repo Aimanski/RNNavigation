@@ -476,43 +476,60 @@ export default function MealplanScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Summary */}
-        <View style={s.summaryCard}>
-          <View style={s.summaryLeft}>
-            <View style={s.summaryLabelRow}>
-              <Ionicons name="flame" size={16} color={colors.accent} />
-              <Text style={s.summaryLabel}>Today&apos;s total</Text>
-              {loading && <ActivityIndicator size="small" color={colors.accent} />}
+        <View style={s.heroCard}>
+          <View style={s.heroTop}>
+            <View style={{ flex: 1 }}>
+              <View style={s.heroLabelRow}>
+                <Ionicons name="flame" size={18} color={colors.onAccent} />
+                <Text style={s.heroLabel}>{goalCalories ? "Calorie goal" : "Today's total"}</Text>
+                {loading && <ActivityIndicator size="small" color={colors.onAccent} />}
+              </View>
+              <Text style={s.heroValue}>
+                {(goalCalories ?? totalCaloriesToday).toLocaleString()}
+                <Text style={s.heroUnit}>{goalCalories ? " kcal a day" : " kcal"}</Text>
+              </Text>
             </View>
-            <Text style={s.summaryValue}>
-              {totalCaloriesToday.toLocaleString()}
-              <Text style={s.summaryUnit}> kcal</Text>
-            </Text>
 
-            {goalCalories ? (
-              <>
-                <View style={s.progressTrack}>
-                  <View style={[s.progressFill, { width: `${goalPct}%` }]} />
+            <View style={s.scanWrap}>
+              <Pressable
+                style={({ pressed }) => [s.scanBtn, pressed && s.pressed]}
+                onPress={() => router.push("/scanFood")}
+                accessibilityRole="button"
+                accessibilityLabel="Scan food"
+              >
+                <Ionicons name="camera" size={26} color={colors.accent} />
+              </Pressable>
+              <Text style={s.scanBtnLabel}>Scan Food</Text>
+            </View>
+          </View>
+
+          {goalCalories ? (
+            <>
+              <View style={s.heroTrack}>
+                <View style={[s.heroFill, { width: `${goalPct}%` }]} />
+              </View>
+              <View style={s.heroStats}>
+                <View style={s.heroStat}>
+                  <Text style={s.heroStatValue}>{totalCaloriesToday.toLocaleString()}</Text>
+                  <Text style={s.heroStatLabel}>Eaten today</Text>
                 </View>
-                <Text style={s.summaryHint}>
-                  {goalPct}% of your {goalCalories.toLocaleString()} kcal goal
-                </Text>
-              </>
-            ) : (
-              <Text style={s.summaryHint}>Add foods below to track your day</Text>
-            )}
-          </View>
-
-          <View style={s.scanWrap}>
-            <Pressable
-              style={({ pressed }) => [s.scanBtn, pressed && s.pressed]}
-              onPress={() => router.push("/scanFood")}
-              accessibilityRole="button"
-              accessibilityLabel="Scan food"
-            >
-              <Ionicons name="camera" size={26} color={colors.onAccent} />
-            </Pressable>
-            <Text style={s.scanBtnLabel}>Scan Food</Text>
-          </View>
+                <View style={s.heroStatDivider} />
+                <View style={s.heroStat}>
+                  <Text style={s.heroStatValue}>
+                    {Math.abs(goalCalories - totalCaloriesToday).toLocaleString()}
+                  </Text>
+                  <Text style={s.heroStatLabel}>{totalCaloriesToday > goalCalories ? "Over goal" : "Left to eat"}</Text>
+                </View>
+                <View style={s.heroStatDivider} />
+                <View style={s.heroStat}>
+                  <Text style={s.heroStatValue}>{goalPct}%</Text>
+                  <Text style={s.heroStatLabel}>Of your goal</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <Text style={s.heroHint}>Add foods below to track your day</Text>
+          )}
         </View>
 
         {/* Suggested */}
@@ -677,31 +694,26 @@ const makeStyles = (c: Colors, isDark: boolean) => {
     pressed: { opacity: 0.75 },
 
     // Summary
-    summaryCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-      backgroundColor: c.surface,
-      borderRadius: 24,
-      borderWidth: 1.5,
-      borderColor: c.border,
-      padding: 20,
+    heroCard: {
+      backgroundColor: c.accent,
+      borderRadius: 28,
+      padding: 22,
       marginBottom: 18,
+      gap: 16,
     },
-    summaryLeft: { flex: 1 },
-    summaryLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-    summaryLabel: { fontSize: 13, fontWeight: "800", color: c.textSecondary, letterSpacing: 0.3 },
-    summaryValue: { fontSize: 34, fontWeight: "900", color: c.textPrimary, marginTop: 4 },
-    summaryUnit: { fontSize: 16, fontWeight: "700", color: c.textSecondary },
-    progressTrack: {
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: c.surfaceAlt,
-      overflow: "hidden",
-      marginTop: 10,
-    },
-    progressFill: { height: "100%", borderRadius: 4, backgroundColor: c.accent },
-    summaryHint: { fontSize: 12.5, fontWeight: "600", color: c.textSecondary, marginTop: 8 },
+    heroTop: { flexDirection: "row", alignItems: "center", gap: 16 },
+    heroLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+    heroLabel: { fontSize: 14, fontWeight: "800", color: c.onAccent, letterSpacing: 0.4, opacity: 0.92 },
+    heroValue: { fontSize: 42, fontWeight: "900", color: c.onAccent, marginTop: 6, letterSpacing: -0.5 },
+    heroUnit: { fontSize: 16, fontWeight: "700", color: c.onAccent, opacity: 0.9 },
+    heroTrack: { height: 10, borderRadius: 5, backgroundColor: c.onAccent + "33", overflow: "hidden" },
+    heroFill: { height: "100%", borderRadius: 5, backgroundColor: c.onAccent },
+    heroStats: { flexDirection: "row", alignItems: "center" },
+    heroStat: { flex: 1, alignItems: "center", gap: 2 },
+    heroStatValue: { fontSize: 18, fontWeight: "900", color: c.onAccent },
+    heroStatLabel: { fontSize: 12, fontWeight: "700", color: c.onAccent, opacity: 0.85 },
+    heroStatDivider: { width: 1, height: 30, backgroundColor: c.onAccent + "40" },
+    heroHint: { fontSize: 13.5, fontWeight: "700", color: c.onAccent, opacity: 0.9 },
     scanWrap: { alignItems: "center" },
     scanBtn: {
       width: 64,
@@ -709,9 +721,9 @@ const makeStyles = (c: Colors, isDark: boolean) => {
       borderRadius: 32,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: c.accent,
+      backgroundColor: c.onAccent,
     },
-    scanBtnLabel: { color: c.accentDark, fontSize: 12.5, fontWeight: "800", marginTop: 8 },
+    scanBtnLabel: { color: c.onAccent, fontSize: 12.5, fontWeight: "800", marginTop: 8 },
 
     // Cards
     section: {

@@ -19,6 +19,8 @@ export type PlanFood = {
   calories: number;
   /* Weight of one serving, in grams */
   serving_g?: number | null;
+  /* Estimated price of one serving, in pesos */
+  price_php?: number | null;
   protein: number;
   carbs: number;
   fat: number;
@@ -34,6 +36,8 @@ export type PlanItem = {
   protein: number;
   carbs: number;
   fat: number;
+  /* Estimated cost of this portion, in pesos */
+  cost: number;
 };
 
 export type PlanMeal = { slot: Slot; title: string; items: PlanItem[]; kcal: number };
@@ -46,12 +50,19 @@ export type PlanDay = {
   weekday: string;
   meals: PlanMeal[];
   kcal: number;
+  /* Estimated cost of the day, in pesos */
+  cost: number;
+  overBudget: boolean;
 };
 
 export type WeekPlan = {
   goal: number;
   weekStart: string;
   days: PlanDay[];
+  /* Daily food budget in pesos, null for no limit */
+  budget: number | null;
+  /* True when some day could not fit the budget */
+  tooLow: boolean;
   /* Foods used anywhere in the week */
   foodIds: Set<string>;
 };
@@ -122,6 +133,11 @@ const minGramsOf = (food: PlanFood) => unitOf(food) * MIN_UNITS;
 const maxGramsOf = (food: PlanFood, slot: Slot) =>
   unitOf(food) * (slot === "snack" ? SNACK_MAX_UNITS : MAX_UNITS);
 
+const FALLBACK_PESO_PER_KCAL = 0.25;
+const priceOf = (food: PlanFood) =>
+  food.price_php && food.price_php > 0 ? food.price_php : food.calories * FALLBACK_PESO_PER_KCAL;
+const costOf = (food: PlanFood, grams: number) => (priceOf(food) * grams) / servingOf(food);
+
 const makeItem = (food: PlanFood, grams: number): PlanItem => {
   const f = grams / servingOf(food);
   return {
@@ -131,6 +147,7 @@ const makeItem = (food: PlanFood, grams: number): PlanItem => {
     protein: Math.round(food.protein * f * 10) / 10,
     carbs: Math.round(food.carbs * f * 10) / 10,
     fat: Math.round(food.fat * f * 10) / 10,
+    cost: Math.round(costOf(food, grams)),
   };
 };
 
@@ -143,7 +160,8 @@ function buildMeal(
   prefs: TastePrefs,
   usedToday: Set<string>,
   usedWeek: Map<string, number>,
-  rng: () => number
+  rng: () => number,
+  pesoPerKcal: number | null
 ): { food: PlanFood; grams: number }[] {
   const ranked = pool
     .map((c) => {
@@ -151,8 +169,14 @@ function buildMeal(
       // Fit
       const tooBig = c.food.calories * (MIN_UNITS / 4) > target * 0.8 ? 4 : 0;
       const watery = kcalPerGram(c.food) < 0.25 ? 2.5 : 0;
+      // Price
+      let thrifty = 0;
+      if (pesoPerKcal) {
+        const ratio = priceOf(c.food) / c.food.calories / pesoPerKcal;
+        thrifty = ratio > 1 ? -Math.min((ratio - 1) * 5, 14) : Math.min((1 - ratio) * 1.5, 1.2);
+      }
       const score =
-        tasteScore(c.tags, prefs) - tooBig - watery - repeats * 1.4 - (usedToday.has(c.food.id) ? 50 : 0) + rng() * 1.6;
+        tasteScore(c.tags, prefs) + thrifty - tooBig - watery - repeats * 1.4 - (usedToday.has(c.food.id) ? 50 : 0) + rng() * 1.6;
       return { c, score };
     })
     .sort((a, b) => b.score - a.score)
@@ -217,10 +241,14 @@ export type PlanInput = {
   blocked: Set<string>;
   weekStart: string;
   seed: string;
+  /* Daily food budget in pesos, null for no limit */
+  budget?: number | null;
 };
 
 export function generateWeekPlan(input: PlanInput): WeekPlan {
   const { goal, prefs, blocked, weekStart, seed } = input;
+  const budget = input.budget && input.budget > 0 ? input.budget : null;
+  const pesoPerKcal = budget ? budget / goal : null;
   const rng = mulberry32(hashString(`${seed}|${weekStart}|${goal}`));
 
   const candidates: Candidate[] = input.foods
@@ -243,7 +271,7 @@ export function generateWeekPlan(input: PlanInput): WeekPlan {
   for (let d = 0; d < 7; d++) {
     const usedToday = new Set<string>();
     const meals: PlanMeal[] = SLOTS.map(({ key, title, share }) => {
-      const built = buildMeal(key, goal * share, poolFor(key), prefs, usedToday, usedWeek, rng);
+      const built = buildMeal(key, goal * share, poolFor(key), prefs, usedToday, usedWeek, rng, pesoPerKcal);
       built.forEach((it) => {
         usedToday.add(it.food.id);
         usedWeek.set(it.food.id, (usedWeek.get(it.food.id) ?? 0) + 1);
@@ -290,6 +318,33 @@ export function generateWeekPlan(input: PlanInput): WeekPlan {
       victim.m.items = victim.m.items.filter((it) => it !== victim.it);
     }
 
+    // Budget
+    const dayCost = () => flatItems().reduce((sum, it) => sum + costOf(it.food, it.grams), 0);
+    if (budget) {
+      for (let attempt = 0; attempt < 16 && dayCost() > budget; attempt++) {
+        const inDay = new Set(flatItems().map((it) => it.food.id));
+        let best: { m: PlanMeal; it: PlanItem; alt: Candidate; grams: number; saving: number } | null = null;
+        for (const m of meals) {
+          for (const it of m.items) {
+            const kcal = itemKcal(it.food, it.grams);
+            const current = costOf(it.food, it.grams);
+            for (const alt of poolFor(m.slot)) {
+              if (inDay.has(alt.food.id)) continue;
+              const grams = clamp(snap(alt.food, kcal / kcalPerGram(alt.food)), minGramsOf(alt.food), maxGramsOf(alt.food, m.slot));
+              const saving = current - costOf(alt.food, grams);
+              const kcalGap = Math.abs(itemKcal(alt.food, grams) - kcal);
+              if (saving > 1 && kcalGap <= kcal * 0.4 && (!best || saving > best.saving)) {
+                best = { m, it, alt, grams, saving };
+              }
+            }
+          }
+        }
+        if (!best) break;
+        best.m.items = best.m.items.map((it) => (it === best!.it ? makeItem(best!.alt.food, best!.grams) : it));
+        balance();
+      }
+    }
+
     meals.forEach((m) => {
       m.items = m.items.map((it) => makeItem(it.food, it.grams));
       m.kcal = m.items.reduce((sum, it) => sum + it.kcal, 0);
@@ -302,8 +357,10 @@ export function generateWeekPlan(input: PlanInput): WeekPlan {
       weekday: WEEKDAYS[d],
       meals: meals.filter((m) => m.items.length > 0),
       kcal: meals.reduce((sum, m) => sum + m.kcal, 0),
+      cost: Math.round(dayCost()),
+      overBudget: !!budget && dayCost() > budget * 1.02,
     });
   }
 
-  return { goal, weekStart, days, foodIds };
+  return { goal, weekStart, days, budget, tooLow: days.some((d) => d.overBudget), foodIds };
 }

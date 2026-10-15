@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMemo } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../ui/AppText";
+import { formatPeso } from "../../lib/health/budget";
 import { WeekPlan } from "../../lib/health/mealPlan";
 import { Colors, useTheme } from "../../providers/ThemeProvider";
 
@@ -29,13 +30,13 @@ export default function PlanTeaser({
     <View style={s.card}>
       <View style={s.headRow}>
         <View style={s.headIcon}>
-          <Ionicons name="sparkles" size={20} color={colors.onAccent} />
+          <Ionicons name="sparkles" size={20} color={colors.accent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={s.title}>Suggested For You</Text>
           <Text style={s.subtitle} numberOfLines={2}>
             {plan && day
-              ? `Day ${day.day} today: ${count} foods, ${day.kcal.toLocaleString()} of ${plan.goal.toLocaleString()} kcal`
+              ? `Day ${day.day} today: ${count} foods, ${day.kcal.toLocaleString()} kcal, about ${formatPeso(day.cost)}`
               : goal
                 ? "A weekly plan made from your goal, tastes and allergies"
                 : "Set up your profile to get a weekly plan"}
@@ -70,7 +71,7 @@ export default function PlanTeaser({
         accessibilityLabel="View your meal plan"
       >
         <Text style={s.buttonText}>View Your Meal Plan</Text>
-        <Ionicons name="arrow-forward" size={18} color={colors.onAccent} />
+        <Ionicons name="arrow-forward" size={18} color={colors.accent} />
       </Pressable>
     </View>
   );
@@ -83,8 +84,8 @@ const makeStyles = (c: Colors) => {
     card: {
       backgroundColor: c.surface,
       borderRadius: 22,
-      borderWidth: 2,
-      borderColor: c.accent,
+      borderWidth: 1.5,
+      borderColor: c.border,
       padding: 16,
       marginBottom: 14,
       gap: 14,
@@ -94,11 +95,11 @@ const makeStyles = (c: Colors) => {
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: c.accent,
+      backgroundColor: c.surfaceAlt,
       alignItems: "center",
       justifyContent: "center",
     },
-    title: { fontSize: 19, fontWeight: "800", color: c.textPrimary },
+    title: { fontSize: 17, fontWeight: "800", color: c.textPrimary },
     subtitle: { fontSize: 13, fontWeight: "600", color: c.textSecondary, marginTop: 1, lineHeight: 18 },
     weekRow: { flexDirection: "row", gap: 8, backgroundColor: tint, borderRadius: 14, padding: 10 },
     weekCol: { flex: 1, alignItems: "center", gap: 6 },
@@ -119,10 +120,10 @@ const makeStyles = (c: Colors) => {
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      backgroundColor: c.accent,
+      backgroundColor: c.surfaceAlt,
       borderRadius: 14,
-      paddingVertical: 14,
+      paddingVertical: 12,
     },
-    buttonText: { color: c.onAccent, fontSize: 16, fontWeight: "800" },
+    buttonText: { color: c.accent, fontSize: 15, fontWeight: "800" },
   });
 };
