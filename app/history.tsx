@@ -12,15 +12,39 @@ import {
   View,
 } from "react-native";
 import { Text } from "../components/ui/AppText";
+import { cache } from "../lib/cache";
 import { supabase } from "../lib/supabase";
 import { getSessionUser } from "../lib/auth/session";
 import { Colors, useTheme } from "../providers/ThemeProvider";
+
+type LogEntry = {
+  id: number;
+  name: string;
+  calories: number;
+  quantity: number;
+  createdAt: string;
+};
+
+type DayHistory = {
+  date: string;
+  calories: number;
+  isOver: boolean;
+  entries: LogEntry[];
+};
+
+const timeLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-US", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" });
+
+const qtyLabel = (qty: number) => (Number.isInteger(qty) ? String(qty) : String(Math.round(qty * 100) / 100));
 
 export default function HistoryScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<DayHistory[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tdee, setTdee] = useState(0);
 
@@ -32,6 +56,8 @@ export default function HistoryScreen() {
           router.replace("/");
           return;
         }
+
+        setUserId(user.id);
 
         const { data: profile } = await supabase
           .from("weighApp")
@@ -48,30 +74,33 @@ export default function HistoryScreen() {
 
         const { data, error } = await supabase
           .from("selected_foods")
-          .select("created_at, calories, quantity")
+          .select("id, food_name, created_at, calories, quantity")
           .eq("user_id", user.id)
           .gte("created_at", thirtyDaysAgo.toISOString())
           .order("created_at", { ascending: false });
 
         if (error) throw error;
 
-        const grouped: Record<string, number> = {};
+        const grouped: Record<string, LogEntry[]> = {};
 
         (data ?? []).forEach((item: any) => {
           const phDate = new Date(item.created_at).toLocaleDateString("en-CA", {
             timeZone: "Asia/Manila",
           });
-
-          if (!grouped[phDate]) grouped[phDate] = 0;
-          grouped[phDate] += (item.calories ?? 0) * (item.quantity ?? 1);
+          (grouped[phDate] ||= []).push({
+            id: item.id,
+            name: item.food_name || "Food",
+            calories: item.calories ?? 0,
+            quantity: item.quantity ?? 1,
+            createdAt: item.created_at,
+          });
         });
 
-        const formatted = Object.keys(grouped)
-          .map(date => ({
-            date,
-            calories: grouped[date],
-            isOver: grouped[date] > dailyGoal,
-          }))
+        const formatted: DayHistory[] = Object.keys(grouped)
+          .map((date) => {
+            const calories = grouped[date].reduce((sum, e) => sum + e.calories * e.quantity, 0);
+            return { date, calories, isOver: calories > dailyGoal, entries: grouped[date] };
+          })
           .sort((a, b) => b.date.localeCompare(a.date));
 
         setHistory(formatted);
@@ -84,6 +113,48 @@ export default function HistoryScreen() {
 
     loadHistory();
   }, [router]);
+
+  const removeEntry = (day: DayHistory, entry: LogEntry) => {
+    if (deleting !== null || !userId) return;
+    Alert.alert(
+      "Remove from your log?",
+      `${entry.name} (${Math.round(entry.calories * entry.quantity)} kcal) will be removed from ${formatDate(day.date)}.`,
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(entry.id);
+            try {
+              const { error } = await supabase
+                .from("selected_foods")
+                .delete()
+                .eq("id", entry.id)
+                .eq("user_id", userId);
+              if (error) throw error;
+              // Totals elsewhere must be recalculated
+              cache.clear();
+              setHistory((prev) =>
+                prev
+                  .map((d) => {
+                    if (d.date !== day.date) return d;
+                    const entries = d.entries.filter((e) => e.id !== entry.id);
+                    const calories = entries.reduce((sum, e) => sum + e.calories * e.quantity, 0);
+                    return { ...d, entries, calories, isOver: calories > tdee };
+                  })
+                  .filter((d) => d.entries.length > 0)
+              );
+            } catch (err: any) {
+              Alert.alert("Couldn't remove", err?.message || "Something went wrong. Please try again.");
+            } finally {
+              setDeleting(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -136,36 +207,72 @@ export default function HistoryScreen() {
             <Text style={s.empty}>No food logged in the last 30 days</Text>
           </View>
         ) : (
-          history.map((day, i) => (
-            <View
-              key={i}
-              style={[
-                s.dayCard,
-                day.isOver && s.dayCardOver,
-              ]}
-            >
-              <View style={s.dayLeft}>
-                <Text style={s.dayDate}>{formatDate(day.date)}</Text>
-                <Text style={s.dayLabel}>
-                  {new Date(day.date).toLocaleDateString(undefined, { weekday: "long" })}
-                </Text>
-              </View>
-
-              <View style={s.rightSide}>
-                <Text style={[s.calories, day.isOver && s.overCalories]}>
-                  {day.calories} kcal
-                </Text>
-                {day.isOver && (
-                  <View style={s.overChip}>
-                    <Ionicons name="trending-up" size={13} color={OVER_COLOR} />
-                    <Text style={s.overText}>
-                      +{day.calories - tdee} over
+          history.map((day) => {
+            const expanded = open === day.date;
+            return (
+              <View key={day.date} style={[s.dayCard, day.isOver && s.dayCardOver]}>
+                <Pressable
+                  style={s.dayHeader}
+                  onPress={() => setOpen(expanded ? null : day.date)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded }}
+                  accessibilityLabel={`${formatDate(day.date)}, ${day.calories} calories. Tap to ${expanded ? "hide" : "see"} foods`}
+                >
+                  <View style={s.dayLeft}>
+                    <Text style={s.dayDate}>{formatDate(day.date)}</Text>
+                    <Text style={s.dayLabel}>
+                      {new Date(day.date).toLocaleDateString(undefined, { weekday: "long" })} · {day.entries.length}{" "}
+                      {day.entries.length === 1 ? "food" : "foods"}
                     </Text>
+                  </View>
+
+                  <View style={s.rightSide}>
+                    <Text style={[s.calories, day.isOver && s.overCalories]}>{Math.round(day.calories)} kcal</Text>
+                    {day.isOver && (
+                      <View style={s.overChip}>
+                        <Ionicons name="trending-up" size={13} color={OVER_COLOR} />
+                        <Text style={s.overText}>+{Math.round(day.calories - tdee)} over</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={colors.accent} />
+                </Pressable>
+
+                {expanded && (
+                  <View style={s.entryList}>
+                    {day.entries.map((entry) => (
+                      <View key={entry.id} style={s.entryRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.entryName} numberOfLines={2}>
+                            {entry.name}
+                          </Text>
+                          <Text style={s.entryMeta}>
+                            {entry.quantity !== 1 ? `${qtyLabel(entry.quantity)} servings · ` : ""}
+                            {timeLabel(entry.createdAt)}
+                          </Text>
+                        </View>
+                        <Text style={s.entryKcal}>{Math.round(entry.calories * entry.quantity)} kcal</Text>
+                        <Pressable
+                          style={({ pressed }) => [s.deleteBtn, pressed && s.pressed]}
+                          onPress={() => removeEntry(day, entry)}
+                          disabled={deleting !== null}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${entry.name} from your log`}
+                        >
+                          {deleting === entry.id ? (
+                            <ActivityIndicator size="small" color={OVER_COLOR} />
+                          ) : (
+                            <Ionicons name="trash-outline" size={20} color={OVER_COLOR} />
+                          )}
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
                 )}
               </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -236,15 +343,39 @@ const makeStyles = (c: Colors) =>
 
     dayCard: {
       backgroundColor: c.surface,
-      padding: 18,
       borderRadius: 22,
+      marginBottom: 12,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      overflow: "hidden",
+    },
+    dayHeader: {
+      padding: 18,
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
       gap: 12,
-      marginBottom: 12,
+    },
+    entryList: { borderTopWidth: 1.5, borderTopColor: c.border, paddingHorizontal: 18, paddingVertical: 6 },
+    entryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    entryName: { fontSize: 15, fontWeight: "800", color: c.textPrimary },
+    entryMeta: { fontSize: 12.5, fontWeight: "600", color: c.textMuted, marginTop: 2 },
+    entryKcal: { fontSize: 14, fontWeight: "800", color: c.accent },
+    deleteBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       borderWidth: 1.5,
-      borderColor: c.border,
+      borderColor: OVER_COLOR,
+      alignItems: "center",
+      justifyContent: "center",
     },
     dayCardOver: {
       borderColor: OVER_COLOR,

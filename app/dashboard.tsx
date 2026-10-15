@@ -207,25 +207,23 @@ export default function DashboardScreen() {
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Navigation */}
-        <Pressable
-          style={({ pressed }) => [s.historyBtn, pressed && s.historyBtnPressed]}
-          onPress={() => router.push("/history")}
-          accessibilityRole="button"
-          accessibilityLabel="View your calorie history"
-        >
-          <View style={s.historyBtnIcon}>
-            <Ionicons name="time-outline" size={20} color={colors.accent} />
-          </View>
-          <Text style={s.historyBtnText}>View your calorie history</Text>
-          <Ionicons name="chevron-forward" size={20} color={colors.accent} />
-        </Pressable>
-
         {/* Progress */}
         <View style={s.card}>
-          <View style={s.cardLabelRow}>
-            <Ionicons name="flame-outline" size={13} color={colors.accentDark} />
-            <Text style={s.cardLabel}>Daily Calories</Text>
+          <View style={s.cardTopRow}>
+            <View style={s.cardLabelRow}>
+              <Ionicons name="flame-outline" size={13} color={colors.accentDark} />
+              <Text style={s.cardLabel}>Daily Calories</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [s.detailBtn, pressed && s.detailBtnPressed]}
+              onPress={() => router.push("/history")}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Open calorie history"
+            >
+              <Text style={s.detailText}>Detail</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
+            </Pressable>
           </View>
           <Text style={s.cardTitle}>Today&apos;s Progress</Text>
           <View style={s.dateChip}>
@@ -399,18 +397,14 @@ const makeStyles = (c: Colors) =>
       color: c.accentDark, textTransform: "uppercase", marginBottom: 2,
     },
     header: { fontSize: 21, fontWeight: "900", color: c.textPrimary, letterSpacing: -0.3 },
-    historyBtn: {
-      flexDirection: "row", alignItems: "center", gap: 12,
-      backgroundColor: c.surface, borderRadius: 20,
-      borderWidth: 1.5, borderColor: c.accent,
-      paddingVertical: 12, paddingHorizontal: 14, marginBottom: 18,
+    cardTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+    detailBtn: {
+      flexDirection: "row", alignItems: "center", gap: 2,
+      paddingVertical: 4, paddingLeft: 12, paddingRight: 6, borderRadius: 999,
+      backgroundColor: c.surfaceAlt,
     },
-    historyBtnPressed: { backgroundColor: c.surfaceAlt },
-    historyBtnIcon: {
-      width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.surfaceAlt, alignItems: "center", justifyContent: "center",
-    },
-    historyBtnText: { flex: 1, fontSize: 15.5, fontWeight: "800", color: c.accent },
+    detailBtnPressed: { opacity: 0.7 },
+    detailText: { fontSize: 13, fontWeight: "800", color: c.accent },
     card: {
       backgroundColor: c.surface, borderRadius: 28, padding: 28, marginBottom: 18,
       borderWidth: 1.5, borderColor: c.border,
