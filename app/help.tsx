@@ -1,7 +1,7 @@
 // Help
 
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   Pressable,
@@ -13,24 +13,18 @@ import { Text, TextInput } from "../components/ui/AppText";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors, useTheme } from "../providers/ThemeProvider";
 
-type HelpRoute =
-  | "/reminders"
-  | "/water"
-  | "/bloodPressure"
-  | "/updateInfo"
-  | "/account"
-  | "/feedback"
-  | "/about";
-
 type IconName = keyof typeof Ionicons.glyphMap;
 
-const QUICK_LINKS: { label: string; icon: IconName; route: HelpRoute }[] = [
+const QUICK_LINKS: { label: string; icon: IconName; route: Href }[] = [
+  { label: "Meal Plan", icon: "sparkles-outline", route: "/myplan" },
+  { label: "Ask Weep", icon: "chatbubble-ellipses-outline", route: "/chatbot" },
+  { label: "Food Budget", icon: "wallet-outline", route: { pathname: "/budget", params: { mode: "edit" } } },
+  { label: "Tastes", icon: "restaurant-outline", route: { pathname: "/tastes", params: { mode: "edit" } } },
+  { label: "Update Info", icon: "create-outline", route: "/updateInfo" },
+  { label: "Account", icon: "person-circle-outline", route: "/account" },
   { label: "Reminders", icon: "notifications-outline", route: "/reminders" },
   { label: "Water", icon: "water-outline", route: "/water" },
   { label: "Blood Pressure", icon: "pulse-outline", route: "/bloodPressure" },
-  { label: "Update Info", icon: "create-outline", route: "/updateInfo" },
-  { label: "Account", icon: "person-circle-outline", route: "/account" },
-  { label: "Feedback", icon: "chatbubble-ellipses-outline", route: "/feedback" },
 ];
 
 const FAQS: { id: string; icon: IconName; q: string; a: string }[] = [
@@ -38,19 +32,67 @@ const FAQS: { id: string; icon: IconName; q: string; a: string }[] = [
     id: "start",
     icon: "rocket-outline",
     q: "How do I get started?",
-    a: "Your daily calorie and macro goals are based on the details you entered when you signed up: gender, age, height, weight and activity level. Keep them up to date in Settings → Update Info so your goals stay accurate, then follow your progress on the Weight tab.",
+    a: "Setup has 7 short steps: your basic info, sex, activity level, calorie goal, food allergies, tastes and a daily food budget. After that, a quick tutorial on Home ends with your weekly meal plan.\n\nKeep your details up to date in Settings → Update Info so your calorie goal stays accurate, then follow your progress on the Weight tab.",
+  },
+  {
+    id: "plan",
+    icon: "sparkles-outline",
+    q: "What is my weekly meal plan?",
+    a: "On the Meals tab, tap View Your Meal Plan on the Suggested For You card. WeighApp builds a plan for Monday to Sunday (Day 1 to Day 7) with Breakfast, Lunch, Dinner and a Snack each day.\n\n• It adds up to your daily calorie goal.\n• It leaves out foods with your allergens.\n• It follows your tastes and your daily food budget.\n\nTap a day to see its meals, tap a food to log it with the planned portion, or tap the shuffle button for a different plan. A new plan is made every week.",
+  },
+  {
+    id: "budget",
+    icon: "wallet-outline",
+    q: "How do I change my food budget or tastes?",
+    a: "Open Settings and tap Food Budget to set how much you can spend on food in a day, or Taste Preferences to say what you love or want to avoid. You can also tap the budget bar at the top of your meal plan. Your plan updates right after you save.\n\nPrices in WeighApp are rough estimates in pesos per serving. If your budget is very low, the plan shows the cheapest meals it can and tells you.",
+  },
+  {
+    id: "badges",
+    icon: "star-outline",
+    q: "What do the red and green badges mean?",
+    a: "On the food cards in Meals:\n\n• Red warning icon = the food has an ingredient you are allergic to.\n• Green star = the food is part of your weekly meal plan.\n\nSet your allergies in Settings → Food Preferences.",
   },
   {
     id: "meal",
     icon: "restaurant-outline",
     q: "How do I log a meal?",
-    a: "Open the Meals tab and expand Breakfast, Lunch or Dinner (or search the Available Library). Tap a food to see its calories and macros, then tap Add to Daily Log. Today's total updates right away.",
+    a: "Open the Meals tab and expand Breakfast, Lunch, Dinner or Snack (or search the Available Library). Tap a food to see its calories and macros, choose the servings, then tap Add to Daily Log. Today's total updates right away.\n\nYou can also log straight from your meal plan.",
   },
   {
     id: "scan",
     icon: "camera-outline",
     q: "How does Scan Food work?",
-    a: "On the Meals tab, tap the round camera button.\n\n• Barcode/QR: point the camera at a packaged food's barcode.\n• Food Photo: frame your meal and tap the capture button to get an estimate of its nutrition.\n\nCheck the amount in grams, then tap Add to Today. If the camera sees something that isn't food, you'll get a warning and can scan again.",
+    a: "On the Meals tab, tap the round camera button.\n\n• Barcode/QR: point the camera at a packaged food's barcode.\n• Food Photo: frame your meal and tap the capture button to get an estimate of its nutrition.\n\nCheck the amount in grams, then tap Add to Today. Scanned foods are saved in your private Scanned Foods card. If the camera sees something that isn't food, you'll get a warning and can scan again.",
+  },
+  {
+    id: "history",
+    icon: "time-outline",
+    q: "Where is my calorie history?",
+    a: "Open the Weight tab and tap Detail on the Daily Calories card. You'll see your last 30 days. Tap a day to see every food you logged, with the time and calories.",
+  },
+  {
+    id: "delete",
+    icon: "trash-outline",
+    q: "Can I delete a wrong entry?",
+    a: "Yes. If you added a food by mistake, go to Weight → Detail, tap the day, and tap the red trash button next to the food. Your totals update right away.\n\nBlood pressure readings have a delete button on each entry, and the Water page can reset today's intake. Sleep entries can't be deleted from the app yet, so check the times before you tap I Just Woke Up.",
+  },
+  {
+    id: "weep",
+    icon: "chatbubble-ellipses-outline",
+    q: "What can Weep help me with?",
+    a: "Weep is the WeighApp assistant on the Weep tab. Ask it about meals, calories, healthy weight habits or how to use the app. It knows your allergies, tastes and budget, so its food ideas fit you. You can send 15 messages a day.\n\nWeep isn't a doctor. For medical concerns, please see a doctor or dietitian.",
+  },
+  {
+    id: "update",
+    icon: "create-outline",
+    q: "What happens when I update my weight or height?",
+    a: "Go to Settings → Update Info. WeighApp recalculates your BMI, daily energy needs and calorie goal, and shows them before you save. Your meal plan then follows the new goal.",
+  },
+  {
+    id: "settings",
+    icon: "settings-outline",
+    q: "Where are the Settings?",
+    a: "Tap your round profile picture at the top right of the Weight, Meals, Home, Sleep or Weep page. From there you can change your account, details, allergies, tastes, budget, reminders and dark mode, or log out. Use the back arrow to return to Home.",
   },
   {
     id: "reminder",
@@ -83,16 +125,16 @@ const FAQS: { id: string; icon: IconName; q: string; a: string }[] = [
     a: "Go to Settings → Account. Tap your photo to choose a new one, edit your username or email, then tap Save Changes. If you signed in with Google, your Google photo is used until you pick your own.",
   },
   {
-    id: "delete",
-    icon: "trash-outline",
-    q: "Can I delete a wrong entry?",
-    a: "Blood pressure readings have a delete button on each entry, and the Water page can reset today's intake. Sleep entries can't be deleted from the app yet, so check the times before you tap I Just Woke Up.",
-  },
-  {
     id: "dark",
     icon: "contrast-outline",
     q: "Can I switch to dark mode?",
     a: "Yes. Turn on the Dark Mode switch at the top of Settings. You can switch back at any time.",
+  },
+  {
+    id: "devices",
+    icon: "phone-portrait-outline",
+    q: "Does WeighApp work on my phone?",
+    a: "WeighApp is made for Android phones and tablets of different sizes. The layout adapts to your screen and to larger system text. If something looks wrong on your phone, please send us feedback with your phone model.",
   },
   {
     id: "privacy",
@@ -167,7 +209,7 @@ export default function HelpScreen() {
             <View style={s.quickGrid}>
               {QUICK_LINKS.map((item) => (
                 <Pressable
-                  key={item.route}
+                  key={item.label}
                   style={({ pressed }) => [s.quickCard, pressed && s.pressed]}
                   onPress={() => router.push(item.route)}
                 >
