@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Text } from "../components/ui/AppText";
@@ -154,6 +155,9 @@ function StatTile({
 export default function MainScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  // Dots shrink on narrow screens so all seven fit in the card
+  const dotSize = Math.max(22, Math.min(34, Math.floor((Math.min(windowWidth, 640) - 84) / 7)));
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [streak, setStreak] = useState(0);
   const [markedDateStrings, setMarkedDateStrings] = useState<string[]>([]);
@@ -453,6 +457,7 @@ export default function MainScreen() {
                 <View
                   style={[
                     s.dayDot,
+                    { width: dotSize, height: dotSize },
                     day.done && s.dayDotDone,
                     day.today && !day.done && s.dayDotToday,
                   ]}
@@ -718,9 +723,6 @@ const makeStyles = (c: Colors) =>
     },
     dayCol: { flex: 1, alignItems: "center", gap: 6 },
     dayDot: {
-      width: "88%",
-      maxWidth: 34,
-      aspectRatio: 1,
       borderRadius: 999,
       backgroundColor: c.surfaceAlt,
       alignItems: "center",
