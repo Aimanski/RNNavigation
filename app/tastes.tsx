@@ -81,7 +81,7 @@ export default function TastesScreen() {
       });
       await saveTastes(userId, final);
       if (isEdit) goBackOr(router, "/setting");
-      else resetTo(router, "/mealplan");
+      else resetTo(router, "/main");
     } catch (err: any) {
       Alert.alert(
         "Couldn't save",

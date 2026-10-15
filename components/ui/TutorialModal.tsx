@@ -90,13 +90,13 @@ const SLIDES: Slide[] = [
     accentText: "Inclusive by design",
   },
   {
-    icon: "rocket",
+    icon: "sparkles",
     iconColor: "#0B6FDB",
     iconBg: "#CFE4FB",
-    title: "You're All Set! 🎉",
-    body: "Your personalised wellness journey starts now. Remember: small daily habits create big long-term results. We're rooting for you every step of the way.",
+    title: "Your Meal Plan Is Set 🎉",
+    body: "We built a weekly plan from your calorie goal, your tastes and your allergies. Small daily habits create big results, and we're rooting for you every step of the way.",
     accent: "#0B6FDB",
-    accentText: "Start your journey",
+    accentText: "Suggested For You",
   },
 ];
 
@@ -104,6 +104,7 @@ const SLIDES: Slide[] = [
 type Props = {
   visible: boolean;
   onDismiss: () => void;
+  onViewMealPlan?: () => void;
 };
 
 // Animation
@@ -136,7 +137,7 @@ function SpringButton({
 }
 
 // Modal
-export default function TutorialModal({ visible, onDismiss }: Props) {
+export default function TutorialModal({ visible, onDismiss, onViewMealPlan }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -181,13 +182,13 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
 
   const handleNext = () => {
     if (isLast) {
-      handleFinish();
+      handleFinish(onViewMealPlan);
     } else {
       goToSlide(currentIndex + 1);
     }
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (afterwards?: () => void) => {
     setSaving(true);
     try {
       const user = await getSessionUser();
@@ -203,7 +204,10 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
     } finally {
       setSaving(false);
       overlayOpacity.value = withTiming(0, { duration: 300 });
-      setTimeout(onDismiss, 310);
+      setTimeout(() => {
+        onDismiss();
+        if (afterwards) afterwards();
+      }, 310);
     }
   };
 
@@ -215,7 +219,7 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={handleFinish}
+      onRequestClose={() => handleFinish()}
     >
       {/* Backdrop */}
       <Animated.View style={[s.backdrop, overlayStyle]}>
@@ -223,7 +227,7 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
         {/* Skip */}
         <Pressable
           style={s.skipBtn}
-          onPress={handleFinish}
+          onPress={() => handleFinish()}
           hitSlop={16}
         >
           <Text style={s.skipTxt}>Skip</Text>
@@ -289,7 +293,7 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
               disabled={saving}
             >
               <Text style={s.nextTxt}>
-                {isLast ? "Start Using WeighApp" : "Next"}
+                {isLast ? "View Meal Plan" : "Next"}
               </Text>
               {!isLast && (
                 <Ionicons
@@ -301,7 +305,7 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
               )}
               {isLast && (
                 <Ionicons
-                  name="rocket"
+                  name="restaurant"
                   size={18}
                   color="#fff"
                   style={{ marginLeft: 8 }}
@@ -309,6 +313,12 @@ export default function TutorialModal({ visible, onDismiss }: Props) {
               )}
             </SpringButton>
           </View>
+
+          {isLast && (
+            <Pressable onPress={() => handleFinish()} hitSlop={10} disabled={saving}>
+              <Text style={s.laterTxt}>Start Using WeighApp</Text>
+            </Pressable>
+          )}
 
           {/* Counter */}
           <Text style={s.counter}>
@@ -475,6 +485,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
 
   // Counter
+  laterTxt: { fontSize: 14, fontWeight: "700", color: c.textSecondary, marginTop: 14, textAlign: "center" },
   counter: {
     fontSize: 12,
     color: c.textMuted,

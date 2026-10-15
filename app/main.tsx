@@ -634,6 +634,7 @@ export default function MainScreen() {
         <TutorialModal
           visible={showTutorial === true}
           onDismiss={() => setShowTutorial(false)}
+          onViewMealPlan={() => router.push("/myplan")}
         />
       )}
     </>
