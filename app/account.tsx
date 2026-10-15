@@ -22,6 +22,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { base64ToArrayBuffer } from "../lib/base64";
 import { fetchAvatarUrl } from "../lib/avatar";
 import { goBackOr } from "../lib/navigation";
 import { supabase } from "../lib/supabase";
@@ -98,6 +99,7 @@ export default function AccountScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.6,
+      base64: true,
     });
     if (result.canceled || !result.assets[0]) return;
 
@@ -106,13 +108,21 @@ export default function AccountScreen() {
       const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
-      const photo = await fetch(result.assets[0].uri);
-      const blob = await photo.blob();
+      // Bytes come from the picker or the file itself, never from a Blob
+      const asset = result.assets[0];
+      let bytes: ArrayBuffer;
+      if (asset.base64) {
+        bytes = base64ToArrayBuffer(asset.base64);
+      } else {
+        const photo = await fetch(asset.uri);
+        bytes = await photo.arrayBuffer();
+      }
+      if (bytes.byteLength === 0) throw new Error("The photo could not be read. Please pick another one.");
       const path = `${user.id}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+        .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
