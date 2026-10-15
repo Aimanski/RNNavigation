@@ -143,6 +143,7 @@ export default function SignUpScreen() {
       return Alert.alert("Password Too Short", "Your password must be at least 6 characters long.");
 
     setEmailLoading(true);
+    let leaving = false;
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -196,6 +197,7 @@ export default function SignUpScreen() {
 
       // Profile
 
+      leaving = true;
       router.replace({ pathname: "/verifyEmail", params: { email: email.trim() } });
     } catch (e: any) {
       const msg = e.message || "";
@@ -209,7 +211,7 @@ export default function SignUpScreen() {
         Alert.alert("Sign Up Failed", msg || "Something went wrong. Please try again.");
       }
     } finally {
-      setEmailLoading(false);
+      if (!leaving) setEmailLoading(false);
     }
   };
 

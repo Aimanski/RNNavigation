@@ -190,6 +190,7 @@ export default function VerifyEmailScreen() {
 
     Keyboard.dismiss();
     setVerifying(true);
+    let leaving = false;
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         email,
@@ -206,13 +207,14 @@ export default function VerifyEmailScreen() {
         .update({ email_code_verified: true })
         .eq("id", data.user.id);
       await navigateAfterLogin(data.user.id, router);
+      leaving = true;
     } catch (err: any) {
       const msg = err.message || "Invalid or expired code. Please try again.";
       Alert.alert("Verification Failed", msg);
       setCode("");
       codeInputRef.current?.focus();
     } finally {
-      setVerifying(false);
+      if (!leaving) setVerifying(false);
     }
   };
 
@@ -253,6 +255,7 @@ export default function VerifyEmailScreen() {
   const handleCheckAgain = async () => {
     if (expired) return;
     setChecking(true);
+    let leaving = false;
     try {
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
@@ -260,8 +263,9 @@ export default function VerifyEmailScreen() {
         return;
       }
       await navigateAfterLogin(data.user.id, router);
+      leaving = true;
     } finally {
-      setChecking(false);
+      if (!leaving) setChecking(false);
     }
   };
 
