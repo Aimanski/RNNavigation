@@ -51,11 +51,16 @@ const RESPONSE_SCHEMA = {
 
 // Facts
 const APP_FACTS = `WEIGHAPP FACTS (for "how do I..." questions):
-- Tabs: Weight, Meals, Home, Sleep, Weep (this chat). Settings is the gear icon in the top bar, next to the profile picture.
-- Meals: Breakfast / Lunch / Dinner / Available Library cards (4 foods at a time; swipe or use the arrows) and a private "Scanned Foods" card. Tap a food, pick servings, then "Add to Daily Log". The camera button scans a barcode or photographs a meal to estimate its nutrition, then adds it to today.
-- Foods with an ingredient the user is allergic to are marked "Allergen". Allergies are set in Settings > Food Preferences.
-- Home shows the streak, calories vs. goal, macros, water, sleep and blood pressure. Settings has Account, Update Info, Food Preferences, reminders, Water, Blood Pressure, Help, feedback and dark mode.
-- The calorie goal comes from body info, activity level and the chosen goal (lose / maintain / gain).`;
+- Tabs along the bottom: Weight, Meals, Home, Sleep, Weep (this chat). Settings opens from the round profile picture at the top right of the Weight, Meals, Home, Sleep and Weep pages. Back from Settings returns to Home.
+- First-time setup has 7 steps: basic info, sex, activity level, calorie goal, food allergies, taste questions and a daily food budget. After that, a short tutorial on Home ends with a "Your Meal Plan Is Set" card and a "View Meal Plan" button.
+- Meals page: the blue Calorie goal card on top shows the goal, what was eaten today, what is left, and the Scan Food camera button (scans a barcode or photographs a meal to estimate nutrition and add it to today). Under it, the "Suggested For You" card has a "View Your Meal Plan" button. Then Breakfast, Lunch, Dinner, Snack, a private "Scanned Foods" card and the Available Library with a search box (4 foods at a time; swipe or use the arrows). Tap a food, pick servings, then "Add to Daily Log".
+- Meal plan: "Your Meal Plan" shows a weekly plan, Day 1 to Day 7 (Monday to Sunday), built from the user's calorie goal, allergies, tastes and daily budget. Each day lists Breakfast, Lunch, Dinner and Snack with grams, calories and an estimated cost in pesos. The shuffle button makes a different plan, and tapping a food opens it with the planned portion so it can be logged. A new plan is made every week. The plan changes when the user changes weight, height, activity, tastes, allergies or budget.
+- Badges on food cards: a red warning icon means it contains an ingredient the user is allergic to; a green star means it is part of the weekly plan.
+- Settings has: Dark Mode, Account, Update Info (recalculates BMI, BMR, TDEE and the calorie goal), Food Preferences (allergies), Taste Preferences (love it / it's okay / not for me for salty, sweet, spicy, savory, sour, creamy, rice and vegetables), Food Budget (pesos per day), Set reminders, Water, Blood Pressure, Help & support, Give feedback, Meet the Team and Logout.
+- Weight page: today's calories and macros. The "Detail" button on the Daily Calories card opens Calorie History for the last 30 days. Tap a day to see the foods logged, and tap the red trash button to remove a food that was added by mistake (the totals update).
+- Home shows the streak, calories vs. goal, macros, water, sleep and blood pressure.
+- The calorie goal comes from body info, activity level and the chosen goal (lose / maintain / gain).
+- Food prices in WeighApp are rough estimates in Philippine pesos per serving.`;
 
 // Allergies
 const ALLERGENS: Record<string, { keywords: string[]; exclude?: string[] }> = {
@@ -111,13 +116,39 @@ const ingredientNames = (ingredients: unknown): string[] =>
     ? ingredients.map((i) => (i && typeof i === "object" ? i.name : null)).filter((n) => typeof n === "string")
     : [];
 
+// Tastes
+const TASTES: Record<string, { label: string; keywords: string[] }> = {
+  salty: { label: "salty food", keywords: ["soy sauce", "toyo", "fish sauce", "patis", "bacon", "ham", "cheese", "tuna", "sardine", "dilis", "tinapa", "adobo", "anchovy", "salt", "asin", "corned beef", "longganisa", "tocino"] },
+  sweet: { label: "sweet food", keywords: ["banana", "saba", "apple", "honey", "sugar", "syrup", "mango", "pineapple", "teriyaki", "cinnamon", "sweet potato", "camote", "dates", "raisin", "berry", "berries"] },
+  spicy: { label: "spicy food", keywords: ["chili", "chilli", "sili", "siling", "curry", "pepper", "peppercorn", "cayenne", "paprika", "spicy", "hot sauce", "sriracha", "ginger"] },
+  savory: { label: "savory, meaty food", keywords: ["chicken", "beef", "pork", "egg", "eggs", "tuna", "fish", "grilled", "stir fry", "stir-fry", "fried", "adobo", "steak", "bangus", "tilapia", "turkey", "meat"] },
+  sour: { label: "sour or tangy food", keywords: ["vinegar", "suka", "lemon", "calamansi", "lime", "tomato", "kamatis", "tamarind", "sampalok", "sinigang", "yogurt", "pickle", "pickled", "adobo"] },
+  creamy: { label: "creamy food", keywords: ["milk", "cheese", "cream", "creamy", "yogurt", "yoghurt", "butter", "coconut", "gata", "oats", "oatmeal", "mayonnaise", "mayo", "custard", "peanut butter"] },
+  rice: { label: "rice meals", keywords: ["rice", "kanin", "sinangag", "congee", "lugaw", "arroz"] },
+  veggies: { label: "vegetables", keywords: ["vegetable", "vegetables", "veggie", "veggies", "carrot", "broccoli", "cabbage", "spinach", "lettuce", "cucumber", "potato", "kangkong", "sitaw", "okra", "pechay", "squash", "kalabasa", "eggplant", "talong", "bell pepper", "celery", "ampalaya", "beans", "peas", "corn"] },
+};
+
+const tasteTags = (texts: string[]): string[] => {
+  const haystack = texts.filter(Boolean).map((t) => t.toLowerCase());
+  return Object.keys(TASTES).filter((key) =>
+    haystack.some((text) => TASTES[key].keywords.some((kw) => containsWord(text, kw)))
+  );
+};
+
+const SLOT_WORDS: [string, RegExp][] = [
+  ["breakfast", /\b(breakfast|almusal|agahan|morning)\b/i],
+  ["lunch", /\b(lunch|tanghalian)\b/i],
+  ["dinner", /\b(dinner|hapunan|supper)\b/i],
+  ["snack", /\b(snack|snacks|merienda|dessert)\b/i],
+];
+
 // Topic
-const FOOD_TOPIC = /\b(meal|meals|breakfast|lunch|dinner|snack|snacks|merienda|ulam|menu|recipe|recipes|dish|dishes|food|foods|suggest|suggestion|suggestions|recommend|plan|plans|ideas?)\b|\b(what|which|anything|something)\b[^.?!]{0,25}\b(eat|kain)\b/i;
-const APP_TOPIC = /\b(app|weighapp|weep|tab|tabs|scan|scanner|barcode|camera|log|logged|setting|settings|reminder|reminders|streak|tutorial|account|profile|button|screen|feature|dashboard|home|library|add)\b/i;
+const FOOD_TOPIC = /\b(meal|meals|breakfast|lunch|dinner|snack|snacks|merienda|ulam|menu|recipe|recipes|dish|dishes|food|foods|suggest|suggestion|suggestions|recommend|plan|plans|ideas?|budget|cheap|cheaper|price|prices|afford|affordable|mura|murang|magkano|gastos|sulit)\b|\b(what|which|anything|something)\b[^.?!]{0,25}\b(eat|kain)\b/i;
+const APP_TOPIC = /\b(app|weighapp|weep|tab|tabs|scan|scanner|barcode|camera|log|logged|setting|settings|reminder|reminders|streak|tutorial|account|profile|button|screen|feature|dashboard|home|library|add|history|detail|delete|remove|preferences|taste|tastes|budget|snack|meal plan|weekly|badge|star)\b/i;
 
 const buildSystemPrompt = (
   profile: any,
-  foods: { name: string; calories: number }[],
+  foods: { name: string; calories: number; price?: number | null }[],
   avoidFoods: string[],
   includeApp: boolean,
   includeCatalog: boolean
@@ -136,11 +167,22 @@ const buildSystemPrompt = (
         .filter(Boolean)
         .join(", ")
     : "not available";
-  const profileLine = `${body}. Allergies / avoided ingredients: ${allergies.length ? allergies.join(", ") : "none"}.`;
+  const tastes = profile?.taste_preferences && typeof profile.taste_preferences === "object" ? profile.taste_preferences : {};
+  const likes = Object.keys(TASTES).filter((k) => tastes[k] === "love").map((k) => TASTES[k].label);
+  const dislikes = Object.keys(TASTES).filter((k) => tastes[k] === "avoid").map((k) => TASTES[k].label);
+  const budget = Number(profile?.food_budget);
+  const tasteLine =
+    likes.length || dislikes.length
+      ? ` Taste: loves ${likes.length ? likes.join(", ") : "nothing in particular"}; avoids ${dislikes.length ? dislikes.join(", ") : "nothing in particular"}.`
+      : "";
+  const budgetLine = budget > 0 ? ` Daily food budget: about ₱${Math.round(budget)} for the whole day.` : "";
+  const profileLine = `${body}. Allergies / avoided ingredients: ${allergies.length ? allergies.join(", ") : "none"}.${tasteLine}${budgetLine}`;
 
   const catalogBlock = includeCatalog
-    ? `\n\nSAFE WEIGHAPP FOODS for this user (kcal per serving): ${
-        foods.length ? foods.map((f) => `${f.name} (${Math.round(f.calories)})`).join("; ") : "none"
+    ? `\n\nSAFE WEIGHAPP FOODS for this user (kcal and estimated peso price per serving): ${
+        foods.length
+          ? foods.map((f) => `${f.name} (${Math.round(f.calories)}${f.price ? `, about ₱${Math.round(f.price)}` : ""})`).join("; ")
+          : "none"
       }${avoidFoods.length ? `\nCONTAIN AN ALLERGEN, never suggest (warn if asked): ${avoidFoods.join("; ")}` : ""}`
     : "";
 
@@ -150,7 +192,7 @@ SCOPE: only (1) how to use WeighApp, (2) health as it relates to body weight (un
 
 BEHAVIOUR: answer exactly what was asked, briefly (usually under 100 words). Give meal ideas, plans or tips ONLY when asked; don't volunteer extras. Use the profile only when relevant; if a needed detail is missing, say so instead of guessing.
 
-ALLERGIES ARE A HARD RULE: treat each allergy as covering related ingredients ("Milk & Dairy" = milk, cheese, butter, cream, yogurt, whey; "Peanuts" includes peanut butter; "Wheat & Gluten" = flour, bread, pasta, noodles; "Shellfish" = shrimp, crab, squid). Never suggest or plan any food, dish or ingredient containing one, not even a small side or sauce; offer a safe alternative. If asked about a food that contains one, warn first.
+TASTE AND BUDGET: when suggesting food, prefer what the user loves, avoid what they marked "not for me", and keep suggestions affordable for their daily budget (a day is about 4 meals and snacks, so one meal is usually well under the full budget). Prices are rough estimates; say so if asked about cost. Never mention tastes or budget unless relevant or asked.\n\nALLERGIES ARE A HARD RULE: treat each allergy as covering related ingredients ("Milk & Dairy" = milk, cheese, butter, cream, yogurt, whey; "Peanuts" includes peanut butter; "Wheat & Gluten" = flour, bread, pasta, noodles; "Shellfish" = shrimp, crab, squid). Never suggest or plan any food, dish or ingredient containing one, not even a small side or sauce; offer a safe alternative. If asked about a food that contains one, warn first.
 
 SAFETY: not a doctor; no diagnosis, medication or supplement dosing. Never under 1,200 kcal/day (women) or 1,500 (men), no crash diets or extreme fasting; healthy pace is 0.25-1 kg/week. For eating disorders, chest pain, fainting, pregnancy, chronic conditions or serious symptoms, advise seeing a doctor or dietitian.
 
@@ -239,28 +281,60 @@ Deno.serve(async (req) => {
 
     const profileCols = "username, gender, age, height_cm, weight_kg, bmi, goal_calories";
     let [profileRes, foodsRes] = await Promise.all([
-      supabaseAdmin.from("weighApp").select(`${profileCols}, allergies`).eq("id", userId).maybeSingle(),
+      supabaseAdmin
+        .from("weighApp")
+        .select(`${profileCols}, allergies, taste_preferences, food_budget`)
+        .eq("id", userId)
+        .maybeSingle(),
       includeCatalog
-        ? supabaseAdmin.from("foods").select("name, calories, ingredients").is("user_id", null).order("name").limit(60)
+        ? supabaseAdmin
+            .from("foods")
+            .select("name, calories, meal_type, price_php, ingredients")
+            .is("user_id", null)
+            .order("name")
+            .limit(400)
         : Promise.resolve({ data: [], error: null }),
     ]);
     if (profileRes.error) {
       // Fallback
-      profileRes = await supabaseAdmin.from("weighApp").select(profileCols).eq("id", userId).maybeSingle();
+      profileRes = await supabaseAdmin.from("weighApp").select(`${profileCols}, allergies`).eq("id", userId).maybeSingle();
+      if (profileRes.error) {
+        profileRes = await supabaseAdmin.from("weighApp").select(profileCols).eq("id", userId).maybeSingle();
+      }
     }
     if (foodsRes.error) {
-      foodsRes = await supabaseAdmin.from("foods").select("name, calories, ingredients").order("name").limit(60);
+      foodsRes = await supabaseAdmin.from("foods").select("name, calories, meal_type, ingredients").order("name").limit(400);
+    }
+    if (foodsRes.error) {
+      foodsRes = await supabaseAdmin.from("foods").select("name, calories, ingredients").order("name").limit(400);
     }
 
     // Allergies
     const userAllergies: string[] = Array.isArray(profileRes.data?.allergies) ? profileRes.data.allergies : [];
-    const safeFoods: { name: string; calories: number }[] = [];
+    const tastePrefs = profileRes.data?.taste_preferences && typeof profileRes.data.taste_preferences === "object"
+      ? profileRes.data.taste_preferences
+      : {};
+    const budget = Number(profileRes.data?.food_budget) > 0 ? Number(profileRes.data.food_budget) : null;
+    const slot = SLOT_WORDS.find(([, re]) => re.test(last.text))?.[0] ?? null;
+
+    const scored: { name: string; calories: number; price: number | null; score: number }[] = [];
     const avoidFoods: string[] = [];
     for (const food of foodsRes.data ?? []) {
       const hits = findAllergens(userAllergies, [food.name, ...ingredientNames(food.ingredients)]);
-      if (hits.length > 0) avoidFoods.push(`${food.name} (${hits.join(", ")})`);
-      else safeFoods.push({ name: food.name, calories: food.calories });
+      if (hits.length > 0) {
+        if (avoidFoods.length < 25) avoidFoods.push(`${food.name} (${hits.join(", ")})`);
+        continue;
+      }
+      const tags = tasteTags([food.name, ...ingredientNames(food.ingredients)]);
+      if (tags.some((tag) => tastePrefs[tag] === "avoid")) continue;
+      let score = tags.reduce((sum, tag) => sum + (tastePrefs[tag] === "love" ? 2 : 0), 0);
+      if (slot && food.meal_type) score += food.meal_type === slot || food.meal_type === "all" ? 3 : -4;
+      const price = Number(food.price_php) > 0 ? Number(food.price_php) : null;
+      if (budget && price) score -= price > budget * 0.45 ? 3 : price > budget * 0.3 ? 1 : 0;
+      scored.push({ name: food.name, calories: food.calories, price, score });
     }
+    scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    const safeFoods = scored.slice(0, 45).map((f) => ({ name: f.name, calories: f.calories, price: f.price }));
 
     const contents = cleaned.map((m) => ({
       role: m.role,
