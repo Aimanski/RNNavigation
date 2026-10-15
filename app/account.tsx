@@ -257,16 +257,18 @@ export default function AccountScreen() {
                 onPress={changeAvatar}
                 disabled={uploadingAvatar}
               >
-                {avatarUrl ? (
-                  <Image source={{ uri: avatarUrl }} style={s.avatarImg} />
-                ) : (
-                  <Ionicons name="person" size={40} color={colors.onAccent} />
-                )}
+                <View style={s.avatarCircle}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={s.avatarImg} />
+                  ) : (
+                    <Ionicons name="person" size={40} color={colors.onAccent} />
+                  )}
+                </View>
                 <View style={s.avatarEditBadge}>
                   {uploadingAvatar ? (
                     <ActivityIndicator size="small" color={colors.onAccent} />
                   ) : (
-                    <Ionicons name="camera" size={14} color={colors.onAccent} />
+                    <Ionicons name="camera" size={16} color={colors.onAccent} />
                   )}
                 </View>
               </Pressable>
@@ -483,6 +485,10 @@ const makeStyles = (c: Colors) =>
     avatarWrap: {
       width: 88,
       height: 88,
+    },
+    avatarCircle: {
+      width: 88,
+      height: 88,
       borderRadius: 44,
       backgroundColor: c.accent,
       alignItems: "center",
@@ -492,11 +498,11 @@ const makeStyles = (c: Colors) =>
     avatarImg: { width: 88, height: 88 },
     avatarEditBadge: {
       position: "absolute",
-      bottom: 0,
-      right: 0,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      bottom: -4,
+      right: -4,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       backgroundColor: c.accentDark,
       alignItems: "center",
       justifyContent: "center",
