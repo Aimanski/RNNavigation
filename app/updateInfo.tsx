@@ -17,6 +17,7 @@ import { Text, TextInput } from "../components/ui/AppText";
 import KeyboardSafeView from "../components/layout/KeyboardSafeView";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GOAL_LABEL, GOAL_OFFSET, recalc, recommendedGoalForBmi, type Energy } from "../lib/health/energy";
+import { BodyEntry, entryDate, fetchBodyHistory, kcal, trim1 } from "../lib/health/bodyHistory";
 import { goBackOr } from "../lib/navigation";
 import { supabase } from "../lib/supabase";
 import { getSessionUser } from "../lib/auth/session";
@@ -42,6 +43,8 @@ export default function UpdateInfoScreen() {
     goalCalories: number | null;
   }>({ gender: null, bmi: null, bmr: null, tdee: null, goalCalories: null });
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState<BodyEntry[]>([]);
+  const [showEarlier, setShowEarlier] = useState(false);
 
   // Prefill
   useEffect(() => {
@@ -52,6 +55,7 @@ export default function UpdateInfoScreen() {
         return;
       }
       setUserId(user.id);
+      fetchBodyHistory(user.id).then(setHistory);
 
       const { data } = await supabase
         .from("weighApp")
@@ -316,6 +320,87 @@ export default function UpdateInfoScreen() {
               </View>
             )}
 
+            {history.length > 0 && (
+              <View style={s.needsBox}>
+                <Text style={s.needsTitle}>Your update history</Text>
+                <Text style={s.needsSub}>Your saved numbers, newest first</Text>
+                <Text style={s.histDate}>Latest · {entryDate(history[0].createdAt)}</Text>
+                <View style={s.needsRow}>
+                  <Text style={s.needsLabel}>Weight</Text>
+                  <Text style={s.needsValue}>{trim1(history[0].weightKg)} kg</Text>
+                </View>
+                <View style={s.needsRow}>
+                  <Text style={s.needsLabel}>Height</Text>
+                  <Text style={s.needsValue}>{trim1(history[0].heightCm)} cm</Text>
+                </View>
+                <View style={s.needsRow}>
+                  <Text style={s.needsLabel}>BMI</Text>
+                  <Text style={s.needsValue}>{trim1(history[0].bmi)}</Text>
+                </View>
+                <View style={s.needsRow}>
+                  <Text style={s.needsLabel}>BMR (at rest)</Text>
+                  <Text style={s.needsValue}>{kcal(history[0].bmr)}</Text>
+                </View>
+                <View style={s.needsRow}>
+                  <Text style={s.needsLabel}>TDEE (with activity)</Text>
+                  <Text style={s.needsValue}>{kcal(history[0].tdee)}</Text>
+                </View>
+                <View style={[s.needsRow, s.needsRowLast]}>
+                  <Text style={s.needsLabel}>Daily goal</Text>
+                  <Text style={[s.needsValue, s.needsGoal]}>{kcal(history[0].goalCalories)}</Text>
+                </View>
+
+                {history.length > 1 && (
+                  <>
+                    <Pressable
+                      style={({ pressed }) => [s.histToggle, pressed && s.pressed]}
+                      onPress={() => setShowEarlier((v) => !v)}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: showEarlier }}
+                    >
+                      <Text style={s.histToggleText}>
+                        {showEarlier ? "Hide earlier updates" : `Earlier updates (${history.length - 1})`}
+                      </Text>
+                      <Ionicons name={showEarlier ? "chevron-up" : "chevron-down"} size={18} color={colors.accent} />
+                    </Pressable>
+
+                    {showEarlier &&
+                      history.slice(1).map((entry) => (
+                        <View key={entry.id} style={s.histEntry}>
+                          <Text style={s.histEntryDate}>{entryDate(entry.createdAt)}</Text>
+                          <View style={s.histGrid}>
+                            <View style={s.histCell}>
+                              <Text style={s.histCellLabel}>Weight</Text>
+                              <Text style={s.histCellValue}>{trim1(entry.weightKg)} kg</Text>
+                            </View>
+                            <View style={s.histCell}>
+                              <Text style={s.histCellLabel}>Height</Text>
+                              <Text style={s.histCellValue}>{trim1(entry.heightCm)} cm</Text>
+                            </View>
+                            <View style={s.histCell}>
+                              <Text style={s.histCellLabel}>BMI</Text>
+                              <Text style={s.histCellValue}>{trim1(entry.bmi)}</Text>
+                            </View>
+                            <View style={s.histCell}>
+                              <Text style={s.histCellLabel}>BMR</Text>
+                              <Text style={s.histCellValue}>{kcal(entry.bmr)}</Text>
+                            </View>
+                            <View style={s.histCell}>
+                              <Text style={s.histCellLabel}>TDEE</Text>
+                              <Text style={s.histCellValue}>{kcal(entry.tdee)}</Text>
+                            </View>
+                            <View style={s.histCell}>
+                              <Text style={s.histCellLabel}>Daily goal</Text>
+                              <Text style={[s.histCellValue, s.needsGoal]}>{kcal(entry.goalCalories)}</Text>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                  </>
+                )}
+              </View>
+            )}
+
             <Pressable
               style={({ pressed }) => [s.btn, (pressed || saving) && s.pressed]}
               onPress={submit}
@@ -442,6 +527,24 @@ const makeStyles = (c: Colors) =>
     needsValue: { fontSize: 15, fontWeight: "800", color: c.textPrimary },
     needsGoal: { color: c.accent },
     needsChange: { fontSize: 12.5, fontWeight: "600", color: c.textMuted, textAlign: "right", marginTop: 2 },
+    histDate: { fontSize: 13, fontWeight: "800", color: c.accent, marginBottom: 2 },
+    histToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      marginTop: 12,
+      paddingVertical: 10,
+      borderRadius: 14,
+      backgroundColor: c.surfaceAlt,
+    },
+    histToggleText: { fontSize: 14, fontWeight: "800", color: c.accent },
+    histEntry: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.border },
+    histEntryDate: { fontSize: 13, fontWeight: "800", color: c.textPrimary, marginBottom: 8 },
+    histGrid: { flexDirection: "row", flexWrap: "wrap", rowGap: 10 },
+    histCell: { width: "33.33%", paddingRight: 6 },
+    histCellLabel: { fontSize: 11.5, fontWeight: "700", color: c.textMuted },
+    histCellValue: { fontSize: 13.5, fontWeight: "800", color: c.textPrimary, marginTop: 1 },
     bmiLabel: { fontSize: 15, fontWeight: "800", color: c.textSecondary },
     bmiValue: {
       fontSize: 44,
