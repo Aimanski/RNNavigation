@@ -129,7 +129,7 @@ export default function MeetTheTeamScreen() {
           </View>
         ))}
 
-        <Text style={s.footer}>Made with love by Team WeighApp © 2025</Text>
+        <Text style={s.footer}>Made with love by Team WeighApp © 2026</Text>
       </ScrollView>
     </View>
   );

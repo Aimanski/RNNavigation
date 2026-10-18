@@ -5,12 +5,10 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Keyboard,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { Text, TextInput } from "../components/ui/AppText";
@@ -210,209 +208,208 @@ export default function UpdateInfoScreen() {
   const bmiCategory = liveBmi ? getBmiCategory(liveBmi) : null;
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
-        <View style={s.headerContainer}>
-          <Text style={s.header}>Update Your Info</Text>
+    <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
+      <View style={s.headerContainer}>
+        <Text style={s.header}>Update Your Info</Text>
 
-        </View>
+      </View>
 
-        <KeyboardSafeView
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-          style={s.flex}
+      <KeyboardSafeView
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+        style={s.flex}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={s.scrollContent}
         >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={s.scrollContent}
-          >
-            <Text style={s.subtitle}>Keep your profile up-to-date</Text>
+          <Text style={s.subtitle}>Keep your profile up-to-date</Text>
 
-            <View style={s.card}>
-              <Text style={s.label}>Age</Text>
-              <View style={[s.inputWrap, focused === "age" && s.inputFocused]}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={focused === "age" ? colors.accent : colors.textMuted}
-                />
-                <TextInput
-                  style={s.input}
-                  placeholder="Age (years)"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="number-pad"
-                  value={age}
-                  onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ""))}
-                  onFocus={() => setFocused("age")}
-                  onBlur={() => setFocused(null)}
-                />
-              </View>
-
-              <Text style={[s.label, s.labelGap]}>Height</Text>
-              <View style={[s.inputWrap, focused === "height" && s.inputFocused]}>
-                <Ionicons
-                  name="resize-outline"
-                  size={20}
-                  color={focused === "height" ? colors.accent : colors.textMuted}
-                />
-                <TextInput
-                  style={s.input}
-                  placeholder="Height (cm)"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="number-pad"
-                  value={height}
-                  onChangeText={(text) => setHeight(text.replace(/[^0-9.]/g, ""))}
-                  onFocus={() => setFocused("height")}
-                  onBlur={() => setFocused(null)}
-                />
-              </View>
-
-              <Text style={[s.label, s.labelGap]}>Weight</Text>
-              <View style={[s.inputWrap, focused === "weight" && s.inputFocused]}>
-                <Ionicons
-                  name="barbell-outline"
-                  size={20}
-                  color={focused === "weight" ? colors.accent : colors.textMuted}
-                />
-                <TextInput
-                  style={s.input}
-                  placeholder="Weight (kg)"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="number-pad"
-                  value={weight}
-                  onChangeText={(text) => setWeight(text.replace(/[^0-9.]/g, ""))}
-                  onFocus={() => setFocused("weight")}
-                  onBlur={() => setFocused(null)}
-                />
-              </View>
+          <View style={s.card}>
+            <Text style={s.label}>Age</Text>
+            <View style={[s.inputWrap, focused === "age" && s.inputFocused]}>
+              <Ionicons
+                name="calendar-outline"
+                size={20}
+                color={focused === "age" ? colors.accent : colors.textMuted}
+              />
+              <TextInput
+                style={s.input}
+                placeholder="Age (years)"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                value={age}
+                onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ""))}
+                onFocus={() => setFocused("age")}
+                onBlur={() => setFocused(null)}
+              />
             </View>
 
-            {liveBmi && (
-              <View style={s.bmiBox}>
-                <Text style={s.bmiLabel}>Your BMI</Text>
-                <Text style={s.bmiValue}>{liveBmi}</Text>
-                <Text style={[s.bmiCategory, { color: bmiCategory?.color }]}>
-                  {bmiCategory?.text}
-                </Text>
+            <Text style={[s.label, s.labelGap]}>Height</Text>
+            <View style={[s.inputWrap, focused === "height" && s.inputFocused]}>
+              <Ionicons
+                name="resize-outline"
+                size={20}
+                color={focused === "height" ? colors.accent : colors.textMuted}
+              />
+              <TextInput
+                style={s.input}
+                placeholder="Height (cm)"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                value={height}
+                onChangeText={(text) => setHeight(text.replace(/[^0-9.]/g, ""))}
+                onFocus={() => setFocused("height")}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
+
+            <Text style={[s.label, s.labelGap]}>Weight</Text>
+            <View style={[s.inputWrap, focused === "weight" && s.inputFocused]}>
+              <Ionicons
+                name="barbell-outline"
+                size={20}
+                color={focused === "weight" ? colors.accent : colors.textMuted}
+              />
+              <TextInput
+                style={s.input}
+                placeholder="Weight (kg)"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                value={weight}
+                onChangeText={(text) => setWeight(text.replace(/[^0-9.]/g, ""))}
+                onFocus={() => setFocused("weight")}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
+          </View>
+
+          {liveBmi && (
+            <View style={s.bmiBox}>
+              <Text style={s.bmiLabel}>Your BMI</Text>
+              <Text style={s.bmiValue}>{liveBmi}</Text>
+              <Text style={[s.bmiCategory, { color: bmiCategory?.color }]}>
+                {bmiCategory?.text}
+              </Text>
+            </View>
+          )}
+
+          {preview && (
+            <View style={s.needsBox}>
+              <Text style={s.needsTitle}>Your daily needs</Text>
+              <Text style={s.needsSub}>Updated from your new numbers when you tap Update</Text>
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>BMR (at rest)</Text>
+                <Text style={s.needsValue}>{Math.round(preview.bmr).toLocaleString()} kcal</Text>
               </View>
-            )}
-
-            {preview && (
-              <View style={s.needsBox}>
-                <Text style={s.needsTitle}>Your daily needs</Text>
-                <Text style={s.needsSub}>Updated from your new numbers when you tap Update</Text>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>BMR (at rest)</Text>
-                  <Text style={s.needsValue}>{Math.round(preview.bmr).toLocaleString()} kcal</Text>
-                </View>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>TDEE (with activity)</Text>
-                  <Text style={s.needsValue}>{preview.tdee.toLocaleString()} kcal</Text>
-                </View>
-                <View style={[s.needsRow, s.needsRowLast]}>
-                  <Text style={s.needsLabel}>Daily goal ({GOAL_LABEL[preview.goal]})</Text>
-                  <Text style={[s.needsValue, s.needsGoal]}>{preview.goalCalories.toLocaleString()} kcal</Text>
-                </View>
-                {saved.goalCalories !== null && saved.goalCalories !== preview.goalCalories && (
-                  <Text style={s.needsChange}>was {saved.goalCalories.toLocaleString()} kcal</Text>
-                )}
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>TDEE (with activity)</Text>
+                <Text style={s.needsValue}>{preview.tdee.toLocaleString()} kcal</Text>
               </View>
-            )}
+              <View style={[s.needsRow, s.needsRowLast]}>
+                <Text style={s.needsLabel}>Daily goal ({GOAL_LABEL[preview.goal]})</Text>
+                <Text style={[s.needsValue, s.needsGoal]}>{preview.goalCalories.toLocaleString()} kcal</Text>
+              </View>
+              {saved.goalCalories !== null && saved.goalCalories !== preview.goalCalories && (
+                <Text style={s.needsChange}>was {saved.goalCalories.toLocaleString()} kcal</Text>
+              )}
+            </View>
+          )}
 
-            {history.length > 0 && (
-              <View style={s.needsBox}>
-                <Text style={s.needsTitle}>Your update history</Text>
-                <Text style={s.needsSub}>Your saved numbers, newest first</Text>
-                <Text style={s.histDate}>Latest · {entryDate(history[0].createdAt)}</Text>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>Weight</Text>
-                  <Text style={s.needsValue}>{trim1(history[0].weightKg)} kg</Text>
-                </View>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>Height</Text>
-                  <Text style={s.needsValue}>{trim1(history[0].heightCm)} cm</Text>
-                </View>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>BMI</Text>
-                  <Text style={s.needsValue}>{trim1(history[0].bmi)}</Text>
-                </View>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>BMR (at rest)</Text>
-                  <Text style={s.needsValue}>{kcal(history[0].bmr)}</Text>
-                </View>
-                <View style={s.needsRow}>
-                  <Text style={s.needsLabel}>TDEE (with activity)</Text>
-                  <Text style={s.needsValue}>{kcal(history[0].tdee)}</Text>
-                </View>
-                <View style={[s.needsRow, s.needsRowLast]}>
-                  <Text style={s.needsLabel}>Daily goal</Text>
-                  <Text style={[s.needsValue, s.needsGoal]}>{kcal(history[0].goalCalories)}</Text>
-                </View>
+          {history.length > 0 && (
+            <View style={s.needsBox}>
+              <Text style={s.needsTitle}>Your update history</Text>
+              <Text style={s.needsSub}>Your saved numbers, newest first</Text>
+              <Text style={s.histDate}>Latest · {entryDate(history[0].createdAt)}</Text>
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>Weight</Text>
+                <Text style={s.needsValue}>{trim1(history[0].weightKg)} kg</Text>
+              </View>
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>Height</Text>
+                <Text style={s.needsValue}>{trim1(history[0].heightCm)} cm</Text>
+              </View>
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>BMI</Text>
+                <Text style={s.needsValue}>{trim1(history[0].bmi)}</Text>
+              </View>
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>BMR (at rest)</Text>
+                <Text style={s.needsValue}>{kcal(history[0].bmr)}</Text>
+              </View>
+              <View style={s.needsRow}>
+                <Text style={s.needsLabel}>TDEE (with activity)</Text>
+                <Text style={s.needsValue}>{kcal(history[0].tdee)}</Text>
+              </View>
+              <View style={[s.needsRow, s.needsRowLast]}>
+                <Text style={s.needsLabel}>Daily goal</Text>
+                <Text style={[s.needsValue, s.needsGoal]}>{kcal(history[0].goalCalories)}</Text>
+              </View>
 
-                {history.length > 1 && (
-                  <>
-                    <Pressable
-                      style={({ pressed }) => [s.histToggle, pressed && s.pressed]}
-                      onPress={() => setShowEarlier((v) => !v)}
-                      accessibilityRole="button"
-                      accessibilityState={{ expanded: showEarlier }}
-                    >
-                      <Text style={s.histToggleText}>
-                        {showEarlier ? "Hide earlier updates" : `Earlier updates (${history.length - 1})`}
-                      </Text>
-                      <Ionicons name={showEarlier ? "chevron-up" : "chevron-down"} size={18} color={colors.accent} />
-                    </Pressable>
+              {history.length > 1 && (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [s.histToggle, pressed && s.pressed]}
+                    onPress={() => setShowEarlier((v) => !v)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showEarlier }}
+                  >
+                    <Text style={s.histToggleText}>
+                      {showEarlier ? "Hide earlier updates" : `Earlier updates (${history.length - 1})`}
+                    </Text>
+                    <Ionicons name={showEarlier ? "chevron-up" : "chevron-down"} size={18} color={colors.accent} />
+                  </Pressable>
 
-                    {showEarlier &&
-                      history.slice(1).map((entry) => (
-                        <View key={entry.id} style={s.histEntry}>
-                          <Text style={s.histEntryDate}>{entryDate(entry.createdAt)}</Text>
-                          <View style={s.histGrid}>
-                            <View style={s.histCell}>
-                              <Text style={s.histCellLabel}>Weight</Text>
-                              <Text style={s.histCellValue}>{trim1(entry.weightKg)} kg</Text>
-                            </View>
-                            <View style={s.histCell}>
-                              <Text style={s.histCellLabel}>Height</Text>
-                              <Text style={s.histCellValue}>{trim1(entry.heightCm)} cm</Text>
-                            </View>
-                            <View style={s.histCell}>
-                              <Text style={s.histCellLabel}>BMI</Text>
-                              <Text style={s.histCellValue}>{trim1(entry.bmi)}</Text>
-                            </View>
-                            <View style={s.histCell}>
-                              <Text style={s.histCellLabel}>BMR</Text>
-                              <Text style={s.histCellValue}>{kcal(entry.bmr)}</Text>
-                            </View>
-                            <View style={s.histCell}>
-                              <Text style={s.histCellLabel}>TDEE</Text>
-                              <Text style={s.histCellValue}>{kcal(entry.tdee)}</Text>
-                            </View>
-                            <View style={s.histCell}>
-                              <Text style={s.histCellLabel}>Daily goal</Text>
-                              <Text style={[s.histCellValue, s.needsGoal]}>{kcal(entry.goalCalories)}</Text>
-                            </View>
+                  {showEarlier &&
+                    history.slice(1).map((entry) => (
+                      <View key={entry.id} style={s.histEntry}>
+                        <Text style={s.histEntryDate}>{entryDate(entry.createdAt)}</Text>
+                        <View style={s.histGrid}>
+                          <View style={s.histCell}>
+                            <Text style={s.histCellLabel}>Weight</Text>
+                            <Text style={s.histCellValue}>{trim1(entry.weightKg)} kg</Text>
+                          </View>
+                          <View style={s.histCell}>
+                            <Text style={s.histCellLabel}>Height</Text>
+                            <Text style={s.histCellValue}>{trim1(entry.heightCm)} cm</Text>
+                          </View>
+                          <View style={s.histCell}>
+                            <Text style={s.histCellLabel}>BMI</Text>
+                            <Text style={s.histCellValue}>{trim1(entry.bmi)}</Text>
+                          </View>
+                          <View style={s.histCell}>
+                            <Text style={s.histCellLabel}>BMR</Text>
+                            <Text style={s.histCellValue}>{kcal(entry.bmr)}</Text>
+                          </View>
+                          <View style={s.histCell}>
+                            <Text style={s.histCellLabel}>TDEE</Text>
+                            <Text style={s.histCellValue}>{kcal(entry.tdee)}</Text>
+                          </View>
+                          <View style={s.histCell}>
+                            <Text style={s.histCellLabel}>Daily goal</Text>
+                            <Text style={[s.histCellValue, s.needsGoal]}>{kcal(entry.goalCalories)}</Text>
                           </View>
                         </View>
-                      ))}
-                  </>
-                )}
-              </View>
-            )}
+                      </View>
+                    ))}
+                </>
+              )}
+            </View>
+          )}
 
-            <Pressable
-              style={({ pressed }) => [s.btn, (pressed || saving) && s.pressed]}
-              onPress={submit}
-              accessibilityRole="button"
-            >
-              <Ionicons name="checkmark-circle" size={20} color={colors.onAccent} />
-              <Text style={s.btnTxt}>Update</Text>
-            </Pressable>
-          </ScrollView>
-        </KeyboardSafeView>
-      </SafeAreaView>
-    </TouchableWithoutFeedback>
+          <Pressable
+            style={({ pressed }) => [s.btn, (pressed || saving) && s.pressed]}
+            onPress={submit}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle" size={20} color={colors.onAccent} />
+            <Text style={s.btnTxt}>Update</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardSafeView>
+    </SafeAreaView>
   );
 }
 
