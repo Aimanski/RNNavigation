@@ -2,10 +2,11 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   Linking,
   Modal,
@@ -187,6 +188,66 @@ function Chip({
     </Pressable>
   );
 }
+
+// Food row
+const FoodCard = memo(function FoodCard({
+  food,
+  s,
+  accent,
+  onEdit,
+  onDelete,
+}: {
+  food: Food;
+  s: Styles;
+  accent: string;
+  onEdit: (food: Food) => void;
+  onDelete: (food: Food) => void;
+}) {
+  return (
+    <View style={s.card}>
+      <View style={s.foodCardTop}>
+        {food.image_url ? (
+          <Image source={{ uri: food.image_url }} style={s.foodThumb} resizeMethod="resize" fadeDuration={0} />
+        ) : (
+          <View style={[s.foodThumb, s.foodThumbPlaceholder]}>
+            <Ionicons name="restaurant" size={24} color={accent} />
+          </View>
+        )}
+        <View style={s.foodInfo}>
+          <Text style={s.foodName} numberOfLines={2}>{food.name}</Text>
+          <View style={s.foodMetaRow}>
+            <View style={s.mealTypeBadge}>
+              <Text style={s.mealTypeBadgeText}>{mealTypeLabel[food.meal_type] || food.meal_type}</Text>
+            </View>
+            {food.ingredients && food.ingredients.length > 0 && (
+              <Text style={s.ingredientCount}>
+                {food.ingredients.length} ingredient{food.ingredients.length > 1 ? "s" : ""}
+              </Text>
+            )}
+          </View>
+        </View>
+        <Text style={s.foodCalories}>{food.calories}<Text style={s.foodCaloriesUnit}> kcal</Text></Text>
+      </View>
+      <View style={s.foodMacros}>
+        <View style={s.macroPill}><View style={[s.macroDot, { backgroundColor: PROTEIN_COLOR }]} /><Text style={s.macroText}>P {food.protein}g</Text></View>
+        <View style={s.macroPill}><View style={[s.macroDot, { backgroundColor: CARBS_COLOR }]} /><Text style={s.macroText}>C {food.carbs}g</Text></View>
+        <View style={s.macroPill}><View style={[s.macroDot, { backgroundColor: FAT_COLOR }]} /><Text style={s.macroText}>F {food.fat}g</Text></View>
+      </View>
+      <View style={s.cardActions}>
+        <Pressable style={({ pressed }) => [s.actionBtn, s.editBtn, pressed && s.pressed]} onPress={() => onEdit(food)}>
+          <Ionicons name="create-outline" size={16} color={accent} />
+          <Text style={s.editBtnText}>Edit</Text>
+        </Pressable>
+        <Pressable style={({ pressed }) => [s.actionBtn, s.deleteBtn, pressed && s.pressed]} onPress={() => onDelete(food)}>
+          <Ionicons name="trash-outline" size={16} color={DANGER_COLOR} />
+          <Text style={s.deleteBtnText}>Delete</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+const foodKey = (food: Food) => food.id;
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -440,11 +501,14 @@ export default function AdminScreen() {
     }
   };
 
-  const filteredFoods = foods.filter((food) => {
-    const matchesName = food.name.toLowerCase().includes(foodSearchQuery.toLowerCase().trim());
-    const matchesMeal = foodMealFilter === "all" || food.meal_type === foodMealFilter;
-    return matchesName && matchesMeal;
-  });
+  const filteredFoods = useMemo(() => {
+    const q = foodSearchQuery.toLowerCase().trim();
+    return foods.filter((food) => {
+      const matchesName = (food.name || "").toLowerCase().includes(q);
+      const matchesMeal = foodMealFilter === "all" || food.meal_type === foodMealFilter;
+      return matchesName && matchesMeal;
+    });
+  }, [foods, foodSearchQuery, foodMealFilter]);
 
   const filteredUsers = users.filter((user) => {
     const q = userSearchQuery.toLowerCase().trim();
@@ -655,7 +719,7 @@ export default function AdminScreen() {
     setFoodModal(true);
   };
 
-  const openEditFood = (food: Food) => {
+  const openEditFood = useCallback((food: Food) => {
     setEditingFood(food);
     setFoodForm({
       name: food.name,
@@ -672,7 +736,7 @@ export default function AdminScreen() {
     setBaseNutrition(null);
     setSelectedGrams(100);
     setFoodModal(true);
-  };
+  }, []);
 
   const closeFoodModal = () => {
     setFoodModal(false);
@@ -719,7 +783,7 @@ export default function AdminScreen() {
     }
   };
 
-  const handleDeleteFood = (food: Food) => {
+  const handleDeleteFood = useCallback((food: Food) => {
     Alert.alert("Delete Food", `Delete "${food.name}"? This cannot be undone.`, [
       { text: "Cancel", style: "cancel" },
       {
@@ -737,7 +801,14 @@ export default function AdminScreen() {
         },
       },
     ]);
-  };
+  }, []);
+
+  const renderFood = useCallback(
+    ({ item }: { item: Food }) => (
+      <FoodCard food={item} s={s} accent={colors.accent} onEdit={openEditFood} onDelete={handleDeleteFood} />
+    ),
+    [s, colors.accent, openEditFood, handleDeleteFood]
+  );
 
   const openEditUser = (user: User) => {
     setEditingUser(user);
@@ -921,6 +992,74 @@ export default function AdminScreen() {
     );
   }
 
+  const overview =
+    activeTab !== "ai" ? (
+      <View style={s.statsGrid}>
+        {stats.map((stat) => (
+          <View key={stat.label} style={s.statCard}>
+            <View style={s.statIcon}>
+              <Ionicons name={stat.icon} size={18} color={colors.accent} />
+            </View>
+            <View>
+              <Text style={s.statNumber}>{stat.value}</Text>
+              <Text style={s.statLabel}>{stat.label}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    ) : null;
+
+  const foodsHeader = (
+    <>
+      {overview}
+      <Pressable style={({ pressed }) => [s.addFoodBtn, pressed && s.pressed]} onPress={openAddFood}>
+        <Ionicons name="add-circle" size={22} color={colors.onAccent} />
+        <Text style={s.addFoodBtnText}>Add new food</Text>
+      </Pressable>
+
+      <View style={s.searchBar}>
+        <Ionicons name="search" size={20} color={colors.accent} style={{ marginRight: 10 }} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search foods..."
+          placeholderTextColor={colors.textMuted}
+          value={foodSearchQuery}
+          onChangeText={setFoodSearchQuery}
+        />
+        {foodSearchQuery.length > 0 && (
+          <Pressable onPress={() => setFoodSearchQuery("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+          </Pressable>
+        )}
+      </View>
+      <View style={s.chipRow}>
+        {MEAL_TYPES.map((type) => (
+          <Chip
+            key={type}
+            s={s}
+            label={type === "all" ? "All" : mealTypeLabel[type]}
+            active={foodMealFilter === type}
+            onPress={() => setFoodMealFilter(type)}
+          />
+        ))}
+      </View>
+      <Text style={s.resultCount}>
+        {filteredFoods.length} food{filteredFoods.length === 1 ? "" : "s"}
+      </Text>
+    </>
+  );
+
+  const foodsEmpty = (
+    <View style={s.emptyBox}>
+      <Ionicons name="restaurant-outline" size={34} color={colors.textMuted} />
+      <Text style={s.emptyText}>No foods found.</Text>
+    </View>
+  );
+
+  const refreshControl = (
+    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} />
+  );
+
   return (
     <SafeAreaView style={s.safeArea}>
       {/* Header */}
@@ -965,508 +1104,420 @@ export default function AdminScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView
-        contentContainerStyle={s.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} />
-        }
-      >
-        {/* Overview */}
-        {activeTab !== "ai" && (
-        <View style={s.statsGrid}>
-          {stats.map((stat) => (
-            <View key={stat.label} style={s.statCard}>
-              <View style={s.statIcon}>
-                <Ionicons name={stat.icon} size={18} color={colors.accent} />
-              </View>
-              <View>
-                <Text style={s.statNumber}>{stat.value}</Text>
-                <Text style={s.statLabel}>{stat.label}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-        )}
+      {activeTab === "foods" ? (
+        <FlatList
+          data={filteredFoods}
+          keyExtractor={foodKey}
+          renderItem={renderFood}
+          ListHeaderComponent={foodsHeader}
+          ListEmptyComponent={foodsEmpty}
+          contentContainerStyle={s.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+        />
+      ) : (
+        <ScrollView
+          contentContainerStyle={s.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
+        >
+          {overview}
 
-        {/* Users */}
-        {activeTab === "users" && (
-          <>
-            <View style={s.searchBar}>
-              <Ionicons name="search" size={20} color={colors.accent} style={{ marginRight: 10 }} />
-              <TextInput
-                style={s.searchInput}
-                placeholder="Search by name or email"
-                placeholderTextColor={colors.textMuted}
-                value={userSearchQuery}
-                onChangeText={setUserSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {userSearchQuery.length > 0 && (
-                <Pressable onPress={() => setUserSearchQuery("")} hitSlop={8}>
-                  <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                </Pressable>
-              )}
-            </View>
-            <View style={s.chipRow}>
-              <Chip s={s} label={`All (${users.length})`} active={userFilter === "all"} onPress={() => setUserFilter("all")} />
-              <Chip s={s} label={`Admins (${users.filter((u) => u.admin).length})`} active={userFilter === "admins"} onPress={() => setUserFilter("admins")} />
-              <Chip s={s} label={`Members (${users.filter((u) => !u.admin).length})`} active={userFilter === "members"} onPress={() => setUserFilter("members")} />
-            </View>
-
-            {filteredUsers.length === 0 ? (
-              <View style={s.emptyBox}>
-                <Ionicons name="people-outline" size={34} color={colors.textMuted} />
-                <Text style={s.emptyText}>{users.length === 0 ? "No users found." : "No users match your search."}</Text>
-              </View>
-            ) : (
-              filteredUsers.map((user) => (
-                <View key={user.id} style={s.card}>
-                  <View style={s.cardTop}>
-                    <View style={s.avatarCircle}>
-                      <Text style={s.avatarText}>{user.username?.charAt(0).toUpperCase() || "?"}</Text>
-                    </View>
-                    <View style={s.cardInfo}>
-                      <View style={s.nameRow}>
-                        <Text style={s.cardName} numberOfLines={1}>{user.username}</Text>
-                        {user.admin && (
-                          <View style={s.adminBadge}>
-                            <Ionicons name="shield-checkmark" size={11} color={GOLD_COLOR} />
-                            <Text style={s.adminBadgeText}>ADMIN</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={s.cardEmail} numberOfLines={1}>{user.email}</Text>
-                      <Text style={s.cardDate}>Joined {formatDate(user.created_at)}</Text>
-                    </View>
-                  </View>
-                  <View style={s.cardActions}>
-                    <Pressable style={({ pressed }) => [s.actionBtn, s.editBtn, pressed && s.pressed]} onPress={() => openEditUser(user)}>
-                      <Ionicons name="create-outline" size={16} color={colors.accent} />
-                      <Text style={s.editBtnText}>Edit</Text>
-                    </Pressable>
-                    <Pressable style={({ pressed }) => [s.actionBtn, s.neutralBtn, pressed && s.pressed]} onPress={() => handleToggleAdmin(user)}>
-                      <Ionicons name={user.admin ? "shield-outline" : "shield-checkmark-outline"} size={16} color={colors.textSecondary} />
-                      <Text style={s.neutralBtnText}>{user.admin ? "Remove admin" : "Make admin"}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [s.iconBtn, s.deleteBtn, pressed && s.pressed]}
-                      onPress={() => handleDeleteUser(user)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Delete ${user.username}`}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={DANGER_COLOR} />
-                    </Pressable>
-                  </View>
-                </View>
-              ))
-            )}
-          </>
-        )}
-
-        {/* Feedback */}
-        {activeTab === "feedback" && (
-          <>
-            {feedback.length > 0 && (
-              <View style={s.ratingCard}>
-                <View style={s.ratingLeft}>
-                  <Text style={s.ratingBig}>{avgRating.toFixed(1)}</Text>
-                  <Stars value={avgRating} size={15} />
-                  <Text style={s.ratingSub}>{feedback.length} review{feedback.length === 1 ? "" : "s"}</Text>
-                </View>
-                <View style={s.ratingBars}>
-                  {ratingCounts.map(({ star, count }) => (
-                    <View key={star} style={s.ratingBarRow}>
-                      <Text style={s.ratingBarLabel}>{star}</Text>
-                      <Ionicons name="star" size={11} color={GOLD_COLOR} />
-                      <View style={s.ratingTrack}>
-                        <View style={[s.ratingFill, { width: `${(count / maxRatingCount) * 100}%` }]} />
-                      </View>
-                      <Text style={s.ratingBarCount}>{count}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <View style={s.chipRow}>
-              <Chip s={s} label="All" active={feedbackFilter === "all"} onPress={() => setFeedbackFilter("all")} />
-              <Chip s={s} label="4–5 ★" active={feedbackFilter === "high"} onPress={() => setFeedbackFilter("high")} />
-              <Chip s={s} label="3 ★" active={feedbackFilter === "mid"} onPress={() => setFeedbackFilter("mid")} />
-              <Chip s={s} label="1–2 ★" active={feedbackFilter === "low"} onPress={() => setFeedbackFilter("low")} />
-            </View>
-
-            {filteredFeedback.length === 0 ? (
-              <View style={s.emptyBox}>
-                <Ionicons name="chatbubbles-outline" size={34} color={colors.textMuted} />
-                <Text style={s.emptyText}>{feedback.length === 0 ? "No feedback yet." : "No feedback in this range."}</Text>
-              </View>
-            ) : (
-              filteredFeedback.map((fb) => (
-                <View key={fb.id} style={s.card}>
-                  <View style={s.feedbackTop}>
-                    <View style={s.feedbackWho}>
-                      <View style={[s.avatarCircle, s.avatarSmall]}>
-                        <Text style={[s.avatarText, { fontSize: 15 }]}>
-                          {usernameFor(fb.user_id).charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.feedbackUser} numberOfLines={1}>{usernameFor(fb.user_id)}</Text>
-                        <Text style={s.feedbackDate}>{formatDate(fb.created_at)}</Text>
-                      </View>
-                    </View>
-                    <Stars value={fb.rating} />
-                  </View>
-                  {fb.message ? (
-                    <Text style={s.feedbackMessage}>{fb.message}</Text>
-                  ) : (
-                    <Text style={s.feedbackNoMessage}>No message provided.</Text>
-                  )}
-                  <View style={s.cardActions}>
-                    <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={({ pressed }) => [s.actionBtn, s.deleteBtn, { flex: 0, paddingHorizontal: 18 }, pressed && s.pressed]}
-                      onPress={() => handleDeleteFeedback(fb.id)}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={DANGER_COLOR} />
-                      <Text style={s.deleteBtnText}>Delete</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))
-            )}
-          </>
-        )}
-
-        {/* Foods */}
-        {activeTab === "foods" && (
-          <>
-            <Pressable style={({ pressed }) => [s.addFoodBtn, pressed && s.pressed]} onPress={openAddFood}>
-              <Ionicons name="add-circle" size={22} color={colors.onAccent} />
-              <Text style={s.addFoodBtnText}>Add new food</Text>
-            </Pressable>
-
-            <View style={s.searchBar}>
-              <Ionicons name="search" size={20} color={colors.accent} style={{ marginRight: 10 }} />
-              <TextInput
-                style={s.searchInput}
-                placeholder="Search foods..."
-                placeholderTextColor={colors.textMuted}
-                value={foodSearchQuery}
-                onChangeText={setFoodSearchQuery}
-              />
-              {foodSearchQuery.length > 0 && (
-                <Pressable onPress={() => setFoodSearchQuery("")} hitSlop={8}>
-                  <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                </Pressable>
-              )}
-            </View>
-            <View style={s.chipRow}>
-              {MEAL_TYPES.map((type) => (
-                <Chip
-                  key={type}
-                  s={s}
-                  label={type === "all" ? "All" : mealTypeLabel[type]}
-                  active={foodMealFilter === type}
-                  onPress={() => setFoodMealFilter(type)}
-                />
-              ))}
-            </View>
-            <Text style={s.resultCount}>
-              {filteredFoods.length} food{filteredFoods.length === 1 ? "" : "s"}
-            </Text>
-
-            {filteredFoods.length === 0 ? (
-              <View style={s.emptyBox}>
-                <Ionicons name="restaurant-outline" size={34} color={colors.textMuted} />
-                <Text style={s.emptyText}>No foods found.</Text>
-              </View>
-            ) : (
-              filteredFoods.map((food) => (
-                <View key={food.id} style={s.card}>
-                  <View style={s.foodCardTop}>
-                    {food.image_url ? (
-                      <Image source={{ uri: food.image_url }} style={s.foodThumb} />
-                    ) : (
-                      <View style={[s.foodThumb, s.foodThumbPlaceholder]}>
-                        <Ionicons name="restaurant" size={24} color={colors.accent} />
-                      </View>
-                    )}
-                    <View style={s.foodInfo}>
-                      <Text style={s.foodName} numberOfLines={2}>{food.name}</Text>
-                      <View style={s.foodMetaRow}>
-                        <View style={s.mealTypeBadge}>
-                          <Text style={s.mealTypeBadgeText}>{mealTypeLabel[food.meal_type] || food.meal_type}</Text>
-                        </View>
-                        {food.ingredients && food.ingredients.length > 0 && (
-                          <Text style={s.ingredientCount}>
-                            {food.ingredients.length} ingredient{food.ingredients.length > 1 ? "s" : ""}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                    <Text style={s.foodCalories}>{food.calories}<Text style={s.foodCaloriesUnit}> kcal</Text></Text>
-                  </View>
-                  <View style={s.foodMacros}>
-                    <View style={s.macroPill}><View style={[s.macroDot, { backgroundColor: PROTEIN_COLOR }]} /><Text style={s.macroText}>P {food.protein}g</Text></View>
-                    <View style={s.macroPill}><View style={[s.macroDot, { backgroundColor: CARBS_COLOR }]} /><Text style={s.macroText}>C {food.carbs}g</Text></View>
-                    <View style={s.macroPill}><View style={[s.macroDot, { backgroundColor: FAT_COLOR }]} /><Text style={s.macroText}>F {food.fat}g</Text></View>
-                  </View>
-                  <View style={s.cardActions}>
-                    <Pressable style={({ pressed }) => [s.actionBtn, s.editBtn, pressed && s.pressed]} onPress={() => openEditFood(food)}>
-                      <Ionicons name="create-outline" size={16} color={colors.accent} />
-                      <Text style={s.editBtnText}>Edit</Text>
-                    </Pressable>
-                    <Pressable style={({ pressed }) => [s.actionBtn, s.deleteBtn, pressed && s.pressed]} onPress={() => handleDeleteFood(food)}>
-                      <Ionicons name="trash-outline" size={16} color={DANGER_COLOR} />
-                      <Text style={s.deleteBtnText}>Delete</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))
-            )}
-          </>
-        )}
-        {/* Usage */}
-        {activeTab === "ai" &&
-          (aiSetup === "missing" ? (
-            <View style={s.card}>
-              <View style={s.aiSetupRow}>
-                <Ionicons name="construct-outline" size={22} color={GOLD_COLOR} />
-                <Text style={s.aiSetupTitle}>Usage tracking isn&apos;t set up yet</Text>
-              </View>
-              <Text style={s.aiSetupText}>
-                Run the AI usage SQL (supabase/migrations/20261008_ai_usage.sql) once in the Supabase
-                SQL Editor, then pull down to refresh. Token counts are recorded from then on.
-              </Text>
-            </View>
-          ) : (
+          {/* Users */}
+          {activeTab === "users" && (
             <>
-              {/* Quota */}
-              <View style={s.card}>
-                <View style={s.quotaHeader}>
-                  <View style={s.quotaTitleWrap}>
-                    <Ionicons name="timer-outline" size={20} color={colors.accent} />
-                    <Text style={s.aiCardTitle}>Daily quota</Text>
+              <View style={s.searchBar}>
+                <Ionicons name="search" size={20} color={colors.accent} style={{ marginRight: 10 }} />
+                <TextInput
+                  style={s.searchInput}
+                  placeholder="Search by name or email"
+                  placeholderTextColor={colors.textMuted}
+                  value={userSearchQuery}
+                  onChangeText={setUserSearchQuery}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {userSearchQuery.length > 0 && (
+                  <Pressable onPress={() => setUserSearchQuery("")} hitSlop={8}>
+                    <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+              <View style={s.chipRow}>
+                <Chip s={s} label={`All (${users.length})`} active={userFilter === "all"} onPress={() => setUserFilter("all")} />
+                <Chip s={s} label={`Admins (${users.filter((u) => u.admin).length})`} active={userFilter === "admins"} onPress={() => setUserFilter("admins")} />
+                <Chip s={s} label={`Members (${users.filter((u) => !u.admin).length})`} active={userFilter === "members"} onPress={() => setUserFilter("members")} />
+              </View>
+
+              {filteredUsers.length === 0 ? (
+                <View style={s.emptyBox}>
+                  <Ionicons name="people-outline" size={34} color={colors.textMuted} />
+                  <Text style={s.emptyText}>{users.length === 0 ? "No users found." : "No users match your search."}</Text>
+                </View>
+              ) : (
+                filteredUsers.map((user) => (
+                  <View key={user.id} style={s.card}>
+                    <View style={s.cardTop}>
+                      <View style={s.avatarCircle}>
+                        <Text style={s.avatarText}>{user.username?.charAt(0).toUpperCase() || "?"}</Text>
+                      </View>
+                      <View style={s.cardInfo}>
+                        <View style={s.nameRow}>
+                          <Text style={s.cardName} numberOfLines={1}>{user.username}</Text>
+                          {user.admin && (
+                            <View style={s.adminBadge}>
+                              <Ionicons name="shield-checkmark" size={11} color={GOLD_COLOR} />
+                              <Text style={s.adminBadgeText}>ADMIN</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={s.cardEmail} numberOfLines={1}>{user.email}</Text>
+                        <Text style={s.cardDate}>Joined {formatDate(user.created_at)}</Text>
+                      </View>
+                    </View>
+                    <View style={s.cardActions}>
+                      <Pressable style={({ pressed }) => [s.actionBtn, s.editBtn, pressed && s.pressed]} onPress={() => openEditUser(user)}>
+                        <Ionicons name="create-outline" size={16} color={colors.accent} />
+                        <Text style={s.editBtnText}>Edit</Text>
+                      </Pressable>
+                      <Pressable style={({ pressed }) => [s.actionBtn, s.neutralBtn, pressed && s.pressed]} onPress={() => handleToggleAdmin(user)}>
+                        <Ionicons name={user.admin ? "shield-outline" : "shield-checkmark-outline"} size={16} color={colors.textSecondary} />
+                        <Text style={s.neutralBtnText}>{user.admin ? "Remove admin" : "Make admin"}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [s.iconBtn, s.deleteBtn, pressed && s.pressed]}
+                        onPress={() => handleDeleteUser(user)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${user.username}`}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={DANGER_COLOR} />
+                      </Pressable>
+                    </View>
                   </View>
+                ))
+              )}
+            </>
+          )}
+
+          {/* Feedback */}
+          {activeTab === "feedback" && (
+            <>
+              {feedback.length > 0 && (
+                <View style={s.ratingCard}>
+                  <View style={s.ratingLeft}>
+                    <Text style={s.ratingBig}>{avgRating.toFixed(1)}</Text>
+                    <Stars value={avgRating} size={15} />
+                    <Text style={s.ratingSub}>{feedback.length} review{feedback.length === 1 ? "" : "s"}</Text>
+                  </View>
+                  <View style={s.ratingBars}>
+                    {ratingCounts.map(({ star, count }) => (
+                      <View key={star} style={s.ratingBarRow}>
+                        <Text style={s.ratingBarLabel}>{star}</Text>
+                        <Ionicons name="star" size={11} color={GOLD_COLOR} />
+                        <View style={s.ratingTrack}>
+                          <View style={[s.ratingFill, { width: `${(count / maxRatingCount) * 100}%` }]} />
+                        </View>
+                        <Text style={s.ratingBarCount}>{count}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View style={s.chipRow}>
+                <Chip s={s} label="All" active={feedbackFilter === "all"} onPress={() => setFeedbackFilter("all")} />
+                <Chip s={s} label="4–5 ★" active={feedbackFilter === "high"} onPress={() => setFeedbackFilter("high")} />
+                <Chip s={s} label="3 ★" active={feedbackFilter === "mid"} onPress={() => setFeedbackFilter("mid")} />
+                <Chip s={s} label="1–2 ★" active={feedbackFilter === "low"} onPress={() => setFeedbackFilter("low")} />
+              </View>
+
+              {filteredFeedback.length === 0 ? (
+                <View style={s.emptyBox}>
+                  <Ionicons name="chatbubbles-outline" size={34} color={colors.textMuted} />
+                  <Text style={s.emptyText}>{feedback.length === 0 ? "No feedback yet." : "No feedback in this range."}</Text>
+                </View>
+              ) : (
+                filteredFeedback.map((fb) => (
+                  <View key={fb.id} style={s.card}>
+                    <View style={s.feedbackTop}>
+                      <View style={s.feedbackWho}>
+                        <View style={[s.avatarCircle, s.avatarSmall]}>
+                          <Text style={[s.avatarText, { fontSize: 15 }]}>
+                            {usernameFor(fb.user_id).charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.feedbackUser} numberOfLines={1}>{usernameFor(fb.user_id)}</Text>
+                          <Text style={s.feedbackDate}>{formatDate(fb.created_at)}</Text>
+                        </View>
+                      </View>
+                      <Stars value={fb.rating} />
+                    </View>
+                    {fb.message ? (
+                      <Text style={s.feedbackMessage}>{fb.message}</Text>
+                    ) : (
+                      <Text style={s.feedbackNoMessage}>No message provided.</Text>
+                    )}
+                    <View style={s.cardActions}>
+                      <View style={{ flex: 1 }} />
+                      <Pressable
+                        style={({ pressed }) => [s.actionBtn, s.deleteBtn, { flex: 0, paddingHorizontal: 18 }, pressed && s.pressed]}
+                        onPress={() => handleDeleteFeedback(fb.id)}
+                      >
+                        <Ionicons name="trash-outline" size={16} color={DANGER_COLOR} />
+                        <Text style={s.deleteBtnText}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          )}
+
+          {/* Usage */}
+          {activeTab === "ai" &&
+            (aiSetup === "missing" ? (
+              <View style={s.card}>
+                <View style={s.aiSetupRow}>
+                  <Ionicons name="construct-outline" size={22} color={GOLD_COLOR} />
+                  <Text style={s.aiSetupTitle}>Usage tracking isn&apos;t set up yet</Text>
+                </View>
+                <Text style={s.aiSetupText}>
+                  Run the AI usage SQL (supabase/migrations/20261008_ai_usage.sql) once in the Supabase
+                  SQL Editor, then pull down to refresh. Token counts are recorded from then on.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* Quota */}
+                <View style={s.card}>
+                  <View style={s.quotaHeader}>
+                    <View style={s.quotaTitleWrap}>
+                      <Ionicons name="timer-outline" size={20} color={colors.accent} />
+                      <Text style={s.aiCardTitle}>Daily quota</Text>
+                    </View>
+                    <Pressable
+                      style={({ pressed }) => [s.quotaEditBtn, pressed && s.pressed]}
+                      onPress={openQuotaModal}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="create-outline" size={15} color={colors.accent} />
+                      <Text style={s.quotaEditText}>Set limits</Text>
+                    </Pressable>
+                  </View>
+
+                  {aiQuota ? (
+                    <View style={s.resetBox}>
+                      <Text style={s.resetBig}>{cycleEnded ? "Resetting…" : `Resets in ${formatCountdown(resetMs ?? 0)}`}</Text>
+                      <Text style={s.resetSub}>
+                        24-hour cycle: {clockLabel(aiQuota.window_start)} → {resetClock} (Philippine time). Counters
+                        go back to 0 when it ends. Google resets daily quotas at midnight Pacific.
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {quotaRows.map((row) => {
+                    const pct = row.limit ? Math.min(100, (row.used / row.limit) * 100) : 0;
+                    const left = row.limit ? Math.max(0, row.limit - row.used) : null;
+                    const barColor = pct >= 100 ? DANGER_COLOR : pct >= 80 ? GOLD_COLOR : colors.accent;
+                    return (
+                      <View key={row.label} style={s.quotaRow}>
+                        <View style={s.quotaRowTop}>
+                          <Text style={s.quotaLabel}>{row.label} used (24h)</Text>
+                          <Text style={s.quotaValue}>
+                            {row.used.toLocaleString()}
+                            {row.limit ? ` / ${row.limit.toLocaleString()}` : ""}
+                          </Text>
+                        </View>
+                        {row.limit ? (
+                          <>
+                            <View style={s.quotaTrack}>
+                              <View style={[s.quotaFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                            </View>
+                            <Text style={[s.quotaLeft, pct >= 100 && { color: DANGER_COLOR }]}>
+                              {left === 0 ? "Limit reached" : `${(left ?? 0).toLocaleString()} left`}
+                            </Text>
+                          </>
+                        ) : (
+                          <Text style={s.quotaLeft}>No limit set. Tap &quot;Set limits&quot; to see what&apos;s left.</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  <Text style={s.quotaNote}>
+                    Gemini doesn&apos;t report remaining quota, so this counts only this app&apos;s calls against the
+                    limits you enter from Google AI Studio. Other uses of the same key aren&apos;t included, and
+                    per-minute limits (tokens per minute) reset every minute.
+                  </Text>
                   <Pressable
-                    style={({ pressed }) => [s.quotaEditBtn, pressed && s.pressed]}
-                    onPress={openQuotaModal}
-                    accessibilityRole="button"
+                    style={({ pressed }) => [s.studioBtn, pressed && s.pressed]}
+                    onPress={() => Linking.openURL(AI_STUDIO_LIMITS_URL)}
+                    accessibilityRole="link"
                   >
-                    <Ionicons name="create-outline" size={15} color={colors.accent} />
-                    <Text style={s.quotaEditText}>Set limits</Text>
+                    <Ionicons name="open-outline" size={16} color={colors.accent} />
+                    <Text style={s.studioBtnText}>See your real limits in AI Studio</Text>
                   </Pressable>
                 </View>
 
-                {aiQuota ? (
-                  <View style={s.resetBox}>
-                    <Text style={s.resetBig}>{cycleEnded ? "Resetting…" : `Resets in ${formatCountdown(resetMs ?? 0)}`}</Text>
-                    <Text style={s.resetSub}>
-                      24-hour cycle: {clockLabel(aiQuota.window_start)} → {resetClock} (Philippine time). Counters
-                      go back to 0 when it ends. Google resets daily quotas at midnight Pacific.
+                <View style={s.statsGrid}>
+                  {[
+                    { icon: "today-outline" as IconName, value: fmtTokens(cycleTokens), label: "Tokens (24h cycle)" },
+                    { icon: "calendar-outline" as IconName, value: fmtTokens(tokens7), label: "Last 7 days" },
+                    { icon: "stats-chart-outline" as IconName, value: fmtTokens(tokens30), label: "Last 30 days" },
+                    { icon: "flash-outline" as IconName, value: calls30.toLocaleString(), label: "AI calls (30 days)" },
+                  ].map((stat) => (
+                    <View key={stat.label} style={s.statCard}>
+                      <View style={s.statIcon}>
+                        <Ionicons name={stat.icon} size={18} color={colors.accent} />
+                      </View>
+                      <View>
+                        <Text style={s.statNumber}>{stat.value}</Text>
+                        <Text style={s.statLabel}>{stat.label}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {calls30 === 0 ? (
+                  <View style={s.emptyBox}>
+                    <Ionicons name="sparkles-outline" size={34} color={colors.textMuted} />
+                    <Text style={s.emptyText}>No AI calls recorded yet.</Text>
+                    <Text style={s.aiEmptyHint}>
+                      Usage appears here after the next scan, auto-fill or Weep chat message.
                     </Text>
                   </View>
-                ) : null}
-
-                {quotaRows.map((row) => {
-                  const pct = row.limit ? Math.min(100, (row.used / row.limit) * 100) : 0;
-                  const left = row.limit ? Math.max(0, row.limit - row.used) : null;
-                  const barColor = pct >= 100 ? DANGER_COLOR : pct >= 80 ? GOLD_COLOR : colors.accent;
-                  return (
-                    <View key={row.label} style={s.quotaRow}>
-                      <View style={s.quotaRowTop}>
-                        <Text style={s.quotaLabel}>{row.label} used (24h)</Text>
-                        <Text style={s.quotaValue}>
-                          {row.used.toLocaleString()}
-                          {row.limit ? ` / ${row.limit.toLocaleString()}` : ""}
-                        </Text>
+                ) : (
+                  <>
+                    {/* Chart */}
+                    <View style={s.card}>
+                      <Text style={s.aiCardTitle}>Tokens per day</Text>
+                      <Text style={s.aiCardSub}>Last {CHART_DAYS} days · peak {fmtTokens(maxDayTotal)}</Text>
+                      <View style={s.chartRow}>
+                        {dayTotals.map(({ day, total, rows }) => (
+                          <View key={day} style={s.chartCol}>
+                            <View style={s.chartBarArea}>
+                              {rows.map((r) => (
+                                <View
+                                  key={r.feature}
+                                  style={{
+                                    height: Math.max(2, (Number(r.total_tokens) / maxDayTotal) * CHART_HEIGHT),
+                                    backgroundColor: featureMeta(r.feature).color,
+                                  }}
+                                />
+                              ))}
+                              {total === 0 && <View style={s.chartEmptyBar} />}
+                            </View>
+                            <Text style={[s.chartDayLabel, day === manilaToday && s.chartDayToday]}>
+                              {Number(day.slice(8))}
+                            </Text>
+                          </View>
+                        ))}
                       </View>
-                      {row.limit ? (
-                        <>
-                          <View style={s.quotaTrack}>
-                            <View style={[s.quotaFill, { width: `${pct}%`, backgroundColor: barColor }]} />
-                          </View>
-                          <Text style={[s.quotaLeft, pct >= 100 && { color: DANGER_COLOR }]}>
-                            {left === 0 ? "Limit reached" : `${(left ?? 0).toLocaleString()} left`}
-                          </Text>
-                        </>
-                      ) : (
-                        <Text style={s.quotaLeft}>No limit set. Tap &quot;Set limits&quot; to see what&apos;s left.</Text>
-                      )}
-                    </View>
-                  );
-                })}
-
-                <Text style={s.quotaNote}>
-                  Gemini doesn&apos;t report remaining quota, so this counts only this app&apos;s calls against the
-                  limits you enter from Google AI Studio. Other uses of the same key aren&apos;t included, and
-                  per-minute limits (tokens per minute) reset every minute.
-                </Text>
-                <Pressable
-                  style={({ pressed }) => [s.studioBtn, pressed && s.pressed]}
-                  onPress={() => Linking.openURL(AI_STUDIO_LIMITS_URL)}
-                  accessibilityRole="link"
-                >
-                  <Ionicons name="open-outline" size={16} color={colors.accent} />
-                  <Text style={s.studioBtnText}>See your real limits in AI Studio</Text>
-                </Pressable>
-              </View>
-
-              <View style={s.statsGrid}>
-                {[
-                  { icon: "today-outline" as IconName, value: fmtTokens(cycleTokens), label: "Tokens (24h cycle)" },
-                  { icon: "calendar-outline" as IconName, value: fmtTokens(tokens7), label: "Last 7 days" },
-                  { icon: "stats-chart-outline" as IconName, value: fmtTokens(tokens30), label: "Last 30 days" },
-                  { icon: "flash-outline" as IconName, value: calls30.toLocaleString(), label: "AI calls (30 days)" },
-                ].map((stat) => (
-                  <View key={stat.label} style={s.statCard}>
-                    <View style={s.statIcon}>
-                      <Ionicons name={stat.icon} size={18} color={colors.accent} />
-                    </View>
-                    <View>
-                      <Text style={s.statNumber}>{stat.value}</Text>
-                      <Text style={s.statLabel}>{stat.label}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {calls30 === 0 ? (
-                <View style={s.emptyBox}>
-                  <Ionicons name="sparkles-outline" size={34} color={colors.textMuted} />
-                  <Text style={s.emptyText}>No AI calls recorded yet.</Text>
-                  <Text style={s.aiEmptyHint}>
-                    Usage appears here after the next scan, auto-fill or Weep chat message.
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  {/* Chart */}
-                  <View style={s.card}>
-                    <Text style={s.aiCardTitle}>Tokens per day</Text>
-                    <Text style={s.aiCardSub}>Last {CHART_DAYS} days · peak {fmtTokens(maxDayTotal)}</Text>
-                    <View style={s.chartRow}>
-                      {dayTotals.map(({ day, total, rows }) => (
-                        <View key={day} style={s.chartCol}>
-                          <View style={s.chartBarArea}>
-                            {rows.map((r) => (
-                              <View
-                                key={r.feature}
-                                style={{
-                                  height: Math.max(2, (Number(r.total_tokens) / maxDayTotal) * CHART_HEIGHT),
-                                  backgroundColor: featureMeta(r.feature).color,
-                                }}
-                              />
-                            ))}
-                            {total === 0 && <View style={s.chartEmptyBar} />}
-                          </View>
-                          <Text style={[s.chartDayLabel, day === manilaToday && s.chartDayToday]}>
-                            {Number(day.slice(8))}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                    <View style={s.legendRow}>
-                      {Object.entries(AI_FEATURES).map(([key, meta]) => (
-                        <View key={key} style={s.legendItem}>
-                          <View style={[s.legendDot, { backgroundColor: meta.color }]} />
-                          <Text style={s.legendText}>{meta.label}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Features */}
-                  <View style={s.card}>
-                    <Text style={s.aiCardTitle}>By feature</Text>
-                    <Text style={s.aiCardSub}>Last 30 days</Text>
-                    {featureTotals.map((f) => {
-                      const meta = featureMeta(f.feature);
-                      return (
-                        <View key={f.feature} style={s.featureRow}>
-                          <View style={[s.featureIcon, { borderColor: meta.color }]}>
-                            <Ionicons name={meta.icon} size={16} color={meta.color} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <View style={s.featureTop}>
-                              <Text style={s.featureName}>{meta.label}</Text>
-                              <Text style={s.featureTokens}>{fmtTokens(f.tokens)}</Text>
-                            </View>
-                            <View style={s.featureTrack}>
-                              <View
-                                style={[
-                                  s.featureFill,
-                                  { width: `${tokens30 > 0 ? (f.tokens / tokens30) * 100 : 0}%`, backgroundColor: meta.color },
-                                ]}
-                              />
-                            </View>
-                            <Text style={s.featureMeta}>
-                              {f.calls.toLocaleString()} call{f.calls === 1 ? "" : "s"} · in {fmtTokens(f.prompt)} · out{" "}
-                              {fmtTokens(f.output)}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-
-                  {/* Ranking */}
-                  {aiByUser.length > 0 && (
-                    <View style={s.card}>
-                      <Text style={s.aiCardTitle}>Top users</Text>
-                      <Text style={s.aiCardSub}>Last 30 days</Text>
-                      {aiByUser.map((row, i) => (
-                        <View key={row.user_id ?? `u${i}`} style={s.userUsageRow}>
-                          <Text style={s.userRank}>{i + 1}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={s.userUsageName} numberOfLines={1}>
-                              {row.username || aiUsername(row.user_id)}
-                            </Text>
-                            <Text style={s.featureMeta}>
-                              {Number(row.calls).toLocaleString()} call{Number(row.calls) === 1 ? "" : "s"}
-                            </Text>
-                          </View>
-                          <Text style={s.featureTokens}>{fmtTokens(Number(row.total_tokens))}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* History */}
-                  {aiRecent.length > 0 && (
-                    <View style={s.card}>
-                      <Text style={s.aiCardTitle}>Recent calls</Text>
-                      {aiRecent.map((row) => {
-                        const meta = featureMeta(row.feature);
-                        return (
-                          <View key={row.id} style={s.recentRow}>
+                      <View style={s.legendRow}>
+                        {Object.entries(AI_FEATURES).map(([key, meta]) => (
+                          <View key={key} style={s.legendItem}>
                             <View style={[s.legendDot, { backgroundColor: meta.color }]} />
-                            <View style={{ flex: 1 }}>
-                              <Text style={s.userUsageName} numberOfLines={1}>
-                                {meta.label} · {aiUsername(row.user_id)}
-                              </Text>
-                              <Text style={s.featureMeta}>{formatDateTime(row.created_at)}</Text>
+                            <Text style={s.legendText}>{meta.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Features */}
+                    <View style={s.card}>
+                      <Text style={s.aiCardTitle}>By feature</Text>
+                      <Text style={s.aiCardSub}>Last 30 days</Text>
+                      {featureTotals.map((f) => {
+                        const meta = featureMeta(f.feature);
+                        return (
+                          <View key={f.feature} style={s.featureRow}>
+                            <View style={[s.featureIcon, { borderColor: meta.color }]}>
+                              <Ionicons name={meta.icon} size={16} color={meta.color} />
                             </View>
-                            <Text style={s.featureTokens}>{fmtTokens(Number(row.total_tokens))}</Text>
+                            <View style={{ flex: 1 }}>
+                              <View style={s.featureTop}>
+                                <Text style={s.featureName}>{meta.label}</Text>
+                                <Text style={s.featureTokens}>{fmtTokens(f.tokens)}</Text>
+                              </View>
+                              <View style={s.featureTrack}>
+                                <View
+                                  style={[
+                                    s.featureFill,
+                                    { width: `${tokens30 > 0 ? (f.tokens / tokens30) * 100 : 0}%`, backgroundColor: meta.color },
+                                  ]}
+                                />
+                              </View>
+                              <Text style={s.featureMeta}>
+                                {f.calls.toLocaleString()} call{f.calls === 1 ? "" : "s"} · in {fmtTokens(f.prompt)} · out{" "}
+                                {fmtTokens(f.output)}
+                              </Text>
+                            </View>
                           </View>
                         );
                       })}
                     </View>
-                  )}
-                </>
-              )}
 
-              <Text style={s.aiFootnote}>
-                Tokens are counted by Gemini (input + output) and recorded by the server after every AI
-                call. Your remaining quota is shown in Google AI Studio.
-              </Text>
-            </>
-          ))}
-      </ScrollView>
+                    {/* Ranking */}
+                    {aiByUser.length > 0 && (
+                      <View style={s.card}>
+                        <Text style={s.aiCardTitle}>Top users</Text>
+                        <Text style={s.aiCardSub}>Last 30 days</Text>
+                        {aiByUser.map((row, i) => (
+                          <View key={row.user_id ?? `u${i}`} style={s.userUsageRow}>
+                            <Text style={s.userRank}>{i + 1}</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.userUsageName} numberOfLines={1}>
+                                {row.username || aiUsername(row.user_id)}
+                              </Text>
+                              <Text style={s.featureMeta}>
+                                {Number(row.calls).toLocaleString()} call{Number(row.calls) === 1 ? "" : "s"}
+                              </Text>
+                            </View>
+                            <Text style={s.featureTokens}>{fmtTokens(Number(row.total_tokens))}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* History */}
+                    {aiRecent.length > 0 && (
+                      <View style={s.card}>
+                        <Text style={s.aiCardTitle}>Recent calls</Text>
+                        {aiRecent.map((row) => {
+                          const meta = featureMeta(row.feature);
+                          return (
+                            <View key={row.id} style={s.recentRow}>
+                              <View style={[s.legendDot, { backgroundColor: meta.color }]} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.userUsageName} numberOfLines={1}>
+                                  {meta.label} · {aiUsername(row.user_id)}
+                                </Text>
+                                <Text style={s.featureMeta}>{formatDateTime(row.created_at)}</Text>
+                              </View>
+                              <Text style={s.featureTokens}>{fmtTokens(Number(row.total_tokens))}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+
+                <Text style={s.aiFootnote}>
+                  Tokens are counted by Gemini (input + output) and recorded by the server after every AI
+                  call. Your remaining quota is shown in Google AI Studio.
+                </Text>
+              </>
+            ))}
+        </ScrollView>
+      )}
 
       {/* Modals */}
 
