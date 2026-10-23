@@ -14,6 +14,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -29,25 +30,75 @@ const REF_MONTH = 0;
 const REF_DATE = 1;
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const mode = notification.request.content.data?.mode;
+    const quiet = mode === "vibrate" || mode === "silent";
+    return {
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: !quiet,
+      shouldSetBadge: false,
+    };
+  },
 });
 
-// Channel
-const REMINDER_CHANNEL_ID = "reminders";
+// Alert styles
+type AlertMode = "ringtone" | "vibrate" | "notification" | "silent";
+type IconName = keyof typeof Ionicons.glyphMap;
+
+const DEFAULT_MODE: AlertMode = "ringtone";
+const ALERT_MODES: { key: AlertMode; label: string; icon: IconName; hint: string }[] = [
+  { key: "ringtone", label: "Ringtone", icon: "musical-notes", hint: "Plays the WeighApp tone and vibrates." },
+  { key: "vibrate", label: "Vibrate", icon: "phone-portrait-outline", hint: "Vibrates with no sound." },
+  { key: "notification", label: "Notification", icon: "notifications-outline", hint: "Uses your phone's normal notification sound." },
+  { key: "silent", label: "Silent", icon: "volume-mute-outline", hint: "Shows quietly with no sound or vibration." },
+];
+
+const modeInfo = (mode: string | null | undefined) =>
+  ALERT_MODES.find((m) => m.key === mode) ?? ALERT_MODES[0];
+
+// Android sets sound and vibration per channel, so each style gets its own
+const MODE_CHANNEL: Record<AlertMode, string> = {
+  ringtone: "reminders_tone",
+  vibrate: "reminders_vibrate",
+  notification: "reminders_notification",
+  silent: "reminders_silent",
+};
+// Earlier channels, removed once everything is rescheduled
+const OLD_CHANNEL_IDS = ["reminders", "reminders_ringtone"];
+const RINGTONE_FILE = "reminder_tone.m4a";
 
 async function ensureNotificationSetup(): Promise<boolean> {
   if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
-      name: "Reminders",
-      importance: Notifications.AndroidImportance.HIGH,
-      sound: "default",
-      vibrationPattern: [0, 250, 250, 250],
-    });
+    const { AndroidImportance } = Notifications;
+    await Promise.all([
+      Notifications.setNotificationChannelAsync(MODE_CHANNEL.ringtone, {
+        name: "Reminders: ringtone",
+        importance: AndroidImportance.HIGH,
+        sound: RINGTONE_FILE,
+        enableVibrate: true,
+        vibrationPattern: [0, 250, 250, 250],
+      }),
+      Notifications.setNotificationChannelAsync(MODE_CHANNEL.vibrate, {
+        name: "Reminders: vibrate",
+        importance: AndroidImportance.HIGH,
+        sound: null,
+        enableVibrate: true,
+        vibrationPattern: [0, 400, 250, 400],
+      }),
+      Notifications.setNotificationChannelAsync(MODE_CHANNEL.notification, {
+        name: "Reminders: notification",
+        importance: AndroidImportance.HIGH,
+        sound: "default",
+        enableVibrate: false,
+      }),
+      Notifications.setNotificationChannelAsync(MODE_CHANNEL.silent, {
+        name: "Reminders: silent",
+        importance: AndroidImportance.DEFAULT,
+        sound: null,
+        enableVibrate: false,
+      }),
+    ]);
   }
 
   const current = await Notifications.getPermissionsAsync();
@@ -63,6 +114,7 @@ type Reminder = {
   time: string;
   enabled: boolean;
   user_id: string;
+  alert_mode?: AlertMode;
 };
 
 export default function RemindersScreen() {
@@ -77,6 +129,7 @@ export default function RemindersScreen() {
   const [selectedTime, setSelectedTime] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
+  const [alertMode, setAlertMode] = useState<AlertMode>(DEFAULT_MODE);
   // State
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -145,6 +198,7 @@ export default function RemindersScreen() {
       name: name.trim(),
       time: stored.toISOString(),
       enabled: true,
+      alert_mode: alertMode,
     };
 
     let error;
@@ -210,25 +264,33 @@ export default function RemindersScreen() {
       const stored = new Date(r.time);
 
       // Scheduling
+      const mode = modeInfo(r.alert_mode).key;
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Reminder",
           body: r.name,
-          sound: true,
+          sound: mode === "ringtone" ? RINGTONE_FILE : mode === "notification",
+          data: { mode },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour: stored.getUTCHours(),
           minute: stored.getUTCMinutes(),
-          channelId: REMINDER_CHANNEL_ID,
+          channelId: MODE_CHANNEL[mode],
         },
       });
+    }
+
+    // Everything now uses the new channels, so the old one can go
+    if (Platform.OS === "android") {
+      OLD_CHANNEL_IDS.forEach((id) => Notifications.deleteNotificationChannelAsync(id).catch(() => {}));
     }
   };
 
   const resetForm = () => {
     setName("");
     setSelectedTime(new Date());
+    setAlertMode(DEFAULT_MODE);
     setEditingId(null);
   };
 
@@ -239,6 +301,7 @@ export default function RemindersScreen() {
     const local = new Date();
     local.setHours(stored.getUTCHours(), stored.getUTCMinutes(), 0, 0);
     setSelectedTime(local);
+    setAlertMode(modeInfo(reminder.alert_mode).key);
     setEditingId(reminder.id);
     setModalVisible(true);
   };
@@ -278,6 +341,10 @@ export default function RemindersScreen() {
                 {formatReminderTime(item.time)}
               </Text>
               <Text style={s.name} numberOfLines={2}>{item.name}</Text>
+              <View style={s.cardMode}>
+                <Ionicons name={modeInfo(item.alert_mode).icon} size={14} color={colors.textMuted} />
+                <Text style={s.cardModeText}>{modeInfo(item.alert_mode).label}</Text>
+              </View>
             </View>
             <View style={s.actions}>
               <Pressable
@@ -340,50 +407,72 @@ export default function RemindersScreen() {
       <Modal visible={modalVisible} transparent animationType="fade">
         <KeyboardSafeView style={s.overlay}>
           <View style={s.modal}>
-            <Text style={s.modalTitle}>{editingId ? "Edit" : "New"} Reminder</Text>
-            <Text style={s.fieldLabel}>Name</Text>
-            <TextInput
-              style={[s.input, nameFocused && s.inputFocused]}
-              placeholder="Reminder name (e.g., Take meds)"
-              placeholderTextColor={colors.textMuted}
-              value={name}
-              onChangeText={setName}
-              onFocus={() => setNameFocused(true)}
-              onBlur={() => setNameFocused(false)}
-            />
-            <Text style={s.fieldLabel}>Time</Text>
-            <Pressable
-              style={({ pressed }) => [s.timeBtn, pressed && s.pressed]}
-              onPress={() => setShowPicker(true)}
-            >
-              <Ionicons name="time-outline" size={24} color={colors.accent} />
-              <Text style={s.timeTxt}>{format(selectedTime, "h:mm a")}</Text>
-            </Pressable>
-            {showPicker && (
-              <DateTimePicker
-                value={selectedTime}
-                mode="time"
-                display="spinner"
-                onChange={(_, d) => {
-                  setShowPicker(Platform.OS === "ios");
-                  if (d) setSelectedTime(d);
-                }}
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={s.modalTitle}>{editingId ? "Edit" : "New"} Reminder</Text>
+              <Text style={s.fieldLabel}>Name</Text>
+              <TextInput
+                style={[s.input, nameFocused && s.inputFocused]}
+                placeholder="Reminder name (e.g., Take meds)"
+                placeholderTextColor={colors.textMuted}
+                value={name}
+                onChangeText={setName}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => setNameFocused(false)}
               />
-            )}
-            <View style={s.btnRow}>
+              <Text style={s.fieldLabel}>Time</Text>
               <Pressable
-                style={({ pressed }) => [s.cancel, pressed && s.pressed]}
-                onPress={() => setModalVisible(false)}
+                style={({ pressed }) => [s.timeBtn, pressed && s.pressed]}
+                onPress={() => setShowPicker(true)}
               >
-                <Text style={s.btnTxt}>Cancel</Text>
+                <Ionicons name="time-outline" size={24} color={colors.accent} />
+                <Text style={s.timeTxt}>{format(selectedTime, "h:mm a")}</Text>
               </Pressable>
-              <Pressable
-                style={({ pressed }) => [s.save, pressed && s.pressed]}
-                onPress={saveReminder}
-              >
-                <Text style={s.saveTxt}>Save</Text>
-              </Pressable>
-            </View>
+              {showPicker && (
+                <DateTimePicker
+                  value={selectedTime}
+                  mode="time"
+                  display="spinner"
+                  onChange={(_, d) => {
+                    setShowPicker(Platform.OS === "ios");
+                    if (d) setSelectedTime(d);
+                  }}
+                />
+              )}
+              <Text style={s.fieldLabel}>Alert style</Text>
+              <View style={s.modeGrid}>
+                {ALERT_MODES.map((m) => {
+                  const on = alertMode === m.key;
+                  return (
+                    <Pressable
+                      key={m.key}
+                      style={({ pressed }) => [s.modeBtn, on && s.modeBtnOn, pressed && s.pressed]}
+                      onPress={() => setAlertMode(m.key)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={m.label}
+                    >
+                      <Ionicons name={m.icon} size={19} color={on ? colors.onAccent : colors.textSecondary} />
+                      <Text style={[s.modeText, on && s.modeTextOn]} numberOfLines={1}>{m.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={s.modeHint}>{modeInfo(alertMode).hint}</Text>
+              <View style={s.btnRow}>
+                <Pressable
+                  style={({ pressed }) => [s.cancel, pressed && s.pressed]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={s.btnTxt}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [s.save, pressed && s.pressed]}
+                  onPress={saveReminder}
+                >
+                  <Text style={s.saveTxt}>Save</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardSafeView>
       </Modal>
@@ -452,6 +541,8 @@ const makeStyles = (c: Colors) =>
       color: c.textSecondary,
       marginTop: 2,
     },
+    cardMode: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
+    cardModeText: { fontSize: 12.5, fontWeight: "700", color: c.textMuted },
     actions: { flexDirection: "row", alignItems: "center", gap: 6 },
     iconBtn: {
       width: 40,
@@ -524,6 +615,7 @@ const makeStyles = (c: Colors) =>
       borderWidth: 1.5,
       borderColor: c.border,
       padding: 24,
+      maxHeight: "92%",
     },
     modalTitle: {
       fontSize: 22,
@@ -563,6 +655,24 @@ const makeStyles = (c: Colors) =>
       marginBottom: 20,
     },
     timeTxt: { fontSize: 26, fontWeight: "800", color: c.textPrimary },
+    modeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 8 },
+    modeBtn: {
+      width: "48%",
+      flexGrow: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 14,
+      backgroundColor: c.background,
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    modeBtnOn: { backgroundColor: c.accent, borderColor: c.accent },
+    modeText: { fontSize: 14.5, fontWeight: "800", color: c.textSecondary },
+    modeTextOn: { color: c.onAccent },
+    modeHint: { fontSize: 12.5, fontWeight: "600", color: c.textMuted, marginBottom: 18, minHeight: 18 },
     btnRow: { flexDirection: "row", gap: 12, marginTop: 4 },
     cancel: {
       flex: 1,

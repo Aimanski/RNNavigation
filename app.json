@@ -83,6 +83,12 @@
         }
       ],
       "expo-font",
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/sounds/reminder_tone.m4a"]
+        }
+      ],
       "expo-web-browser",
       [
         "expo-camera",
